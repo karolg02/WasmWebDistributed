@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+    <meta charset="UTF-8">
+    <title>inzynierka</title>
+</head>
+
+<body>
+    <p>Wynik: <span id="result"></span></p>
+</body>
+
+<script src="index.js"></script>
+<script>
+    Module.onRuntimeInitialized = () => {
+        const socket = new WebSocket("ws://localhost:8080");
+
+        socket.onopen = () => {
+            console.log("polaczono do socketu");
+        }
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === "task") {
+                const result = Module.ccall("add", "number", ["number", "number"], [data.a, data.b]);
+
+                document.getElementById("result").textContent = result;
+
+                const response = {
+                    type: "result",
+                    taskId: data.taskId || null,
+                    result: result
+                };
+
+                socket.send(JSON.stringify(response));
+            }
+        }
+    };
+</script>
+
+</html>
