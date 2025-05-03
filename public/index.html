@@ -13,11 +13,9 @@
 
 <script src="index.js"></script>
 <script>
-
-    let localTotal = 0;
-    Module.onRuntimeInitialized = () => {
+    function connect() {
+        let localTotal = 0;
         const socket = new WebSocket("ws://localhost:8080");
-
         socket.onopen = () => {
             console.log("polaczono do socketu");
         }
@@ -41,6 +39,13 @@
                 socket.send(JSON.stringify(response));
             }
         }
+        socket.onclose = () => {
+            setTimeout(connect, 1000);
+        }
+    }
+
+    Module.onRuntimeInitialized = () => {
+        connect();
     };
 </script>
 
