@@ -1,0 +1,3 @@
+python3 -m http.server 8000
+node server.js
+emcc add.cpp -o index.js   -sEXPORTED_FUNCTIONS=_add   -sEXPORTED_RUNTIME_METHODS=ccall   -sENVIRONMENT=web
