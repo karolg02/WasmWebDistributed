@@ -23,7 +23,7 @@
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === "task") {
-                const result = Module.ccall("add", "number", ["number", "number"], [data.a, data.b]);
+                const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
 
                 document.getElementById("result").textContent = result;
 

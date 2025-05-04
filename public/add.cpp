@@ -1,13 +1,26 @@
 #include <stdio.h>
+#include <cmath>
 #include <emscripten/emscripten.h>
-
 extern "C"
 {
-  EMSCRIPTEN_KEEPALIVE
-  int add(int a, int b)
+  double funkcja(double x)
   {
-    printf("%d", a + b);
-    return a + b;
+    return sin(x);
+  }
+
+  EMSCRIPTEN_KEEPALIVE
+  double add(double a, double b, double dx)
+  {
+    int N = ceil((b - a) / dx);
+    double dx_adjust = (b - a) / N;
+    int i;
+    double calka = 0.0;
+    for (i = 0; i < N; i++)
+    {
+      double x1 = a + i * dx_adjust;
+      calka += 0.5 * dx_adjust * (funkcja(x1) + funkcja(x1 + dx_adjust));
+    }
+    return (calka);
   }
 }
 
