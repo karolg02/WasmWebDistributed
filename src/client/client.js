@@ -14,3 +14,8 @@ socket.on("worker_update", (workerIds) => {
         ul.appendChild(li);
     });
 });
+
+socket.on("final_result", (data) => {
+    document.getElementById("global-result").textContent = data.sum.toFixed(6);
+    document.getElementById("duration").textContent = data.duration;
+});

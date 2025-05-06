@@ -34,4 +34,4 @@ async function createTasks() {
     await connection.close();
 }
 
-createTasks();
+module.exports = { createTasks };
