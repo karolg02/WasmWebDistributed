@@ -18,12 +18,13 @@ let activeTasks = 0;
 //workerzy
 const workers = new Map();
 let Sending = false;
+const workerTasks = new Map();
 
 //timery
 let startTimer = null;
 
 //klienci
-let requestingClient = null;
+
 
 async function broadcastWorkerList() {
     const list = Array.from(workers.entries()).map(([id, { name }]) => ({

@@ -1,4 +1,4 @@
-const socket = io("http://localhost:8080/client");
+const socket = io(`http://${window.location.hostname}:8080/client`);
 
 const startButton = document.getElementById("start");
 const workerList = document.getElementById("workerList");

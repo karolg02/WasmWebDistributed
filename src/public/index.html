@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>inzynierka</title>
+    <title>worker</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 
@@ -14,14 +14,14 @@
 <script src="benchmark/benchmark.js"></script>
 <script src="index.js"></script>
 <script>
-    const socket = io("http://localhost:8080/worker");
+    const socket = io(`http://${window.location.hostname}:8080/worker`);
+
     let score;
     BenchmarkModule().then(benchmark => {
         const t0 = performance.now();
         benchmark.ccall("benchmark");
         const t1 = performance.now();
         score = (t1 - t0).toFixed(2);
-        console.log("Wynik benchmarku:", score);
 
         const browserInfo = `System: ${navigator.platform}, moc przeglądarki: ${score}`;
 
@@ -31,10 +31,6 @@
     });
     Module.onRuntimeInitialized = () => {
         let localTotal = 0;
-
-
-
-
         socket.on("task", (data) => {
             const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
 
