@@ -10,7 +10,7 @@ async function createTasks() {
     const start = 0;
     const koniec = Math.PI;
     const dx = 0.000001;
-    const N = 200000;
+    const N = 100000;
 
     const fragment = (koniec - start) / N;
 

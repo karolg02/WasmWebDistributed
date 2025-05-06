@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>inzynierka</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 
 <body>
@@ -15,33 +16,28 @@
 <script>
     function connect() {
         let localTotal = 0;
-        const socket = new WebSocket("ws://localhost:8080");
-        socket.onopen = () => {
-            console.log("polaczono do socketu");
-        }
+        const socket = io("http://localhost:8080/worker");
+        socket.on("connect", () => {
+            console.log("Połączono z Socket.IO");
+        });
 
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === "task") {
-                const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
+        socket.on("task", (data) => {
+            const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
 
-                document.getElementById("result").textContent = result;
+            document.getElementById("result").textContent = result.toFixed(6);
+            localTotal += result;
+            document.getElementById("final_result").textContent = localTotal.toFixed(6);
 
-                localTotal += result;
-                document.getElementById("final_result").textContent = localTotal;
+            socket.emit("result", {
+                taskId: data.taskId,
+                result: result
+            });
+        });
 
-                const response = {
-                    type: "result",
-                    taskId: data.taskId || null,
-                    result: result
-                };
-
-                socket.send(JSON.stringify(response));
-            }
-        }
-        socket.onclose = () => {
+        socket.on("disconnect", () => {
+            console.log("❌ Rozłączono. Próba ponownego połączenia...");
             setTimeout(connect, 1000);
-        }
+        });
     }
 
     Module.onRuntimeInitialized = () => {
