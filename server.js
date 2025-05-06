@@ -16,22 +16,23 @@ const taskQueue = [];
 let activeTasks = 0;
 
 //workerzy
-const workers = new Set();
+const workers = new Map();
 let Sending = false;
 
 //timery
 let startTimer = null;
-let endTimer = null;
 
 //klienci
 let requestingClient = null;
 
 async function broadcastWorkerList() {
-    const allIds = Array.from(workers)
-        .filter(w => w && typeof w.id === "string")
-        .map(w => w.id);
-    io.of("/client").emit("worker_update", allIds);
+    const list = Array.from(workers.entries()).map(([id, { name }]) => ({
+        id,
+        name
+    }));
+    io.of("/client").emit("worker_update", list);
 }
+
 
 async function start() {
     const connection = await amqp.connect("amqp://localhost");
@@ -48,12 +49,16 @@ async function start() {
     //tu dzialanie workerow
     io.of("/worker").on("connection", (socket) => {
         console.log("Podlaczono workera: ", socket.id);
-        workers.add(socket);
-        broadcastWorkerList();
+
+        socket.on("register", (data) => {
+            const name = data.name || `Worker-${socket.id}`;
+            workers.set(socket.id, { socket, name });
+            broadcastWorkerList();
+        })
 
         socket.on("disconnect", () => {
             console.log("Worker odlaczony", socket.id);
-            workers.delete(socket);
+            workers.delete(socket.id);
             broadcastWorkerList();
         });
 
@@ -63,30 +68,28 @@ async function start() {
             console.log(`${socket.id}: ${data.result}: suma(${sum})`);
 
             if (taskQueue.length > 0 && Sending) {
-                for (const worker of workers) {
-                    if (taskQueue.length > 0) {
+                for (const id of activeClient.workerIds) {
+                    const worker = workers.get(id)?.socket;
+                    if (worker && taskQueue.length > 0) {
                         const task = taskQueue.shift();
+                        task.clientId = activeClient.socket.id;
                         worker.emit("task", task);
                         activeTasks++;
                     }
                 }
             } else if (taskQueue.length === 0 && Sending && activeTasks === 0) {
                 //koniec roboty
-                endTimer = Date.now();
-                const durationSeconds = ((endTimer - startTimer) / 1000).toFixed(2);
-                console.log(`Czas obliczeń: ${durationSeconds} sekund`);
+                const durationSeconds = ((Date.now() - startTimer) / 1000).toFixed(2);
                 Sending = false;
 
-                const finalSum = sum;
+                activeClient.socket.emit("final_result", {
+                    sum: parseFloat(sum.toFixed(6)),
+                    duration: durationSeconds
+                });
+
                 sum = 0;
                 startTimer = null;
-
-                if (requestingClient) {
-                    requestingClient.emit("final_result", {
-                        sum: finalSum,
-                        duration: durationSeconds
-                    });
-                }
+                activeClient = null;
             }
         });
     })
@@ -94,22 +97,30 @@ async function start() {
     //tu dzialanie klientow
     io.of("/client").on("connection", (socket) => {
         console.log("Klient podlaczony", socket.id);
-
         broadcastWorkerList();
 
-        socket.on("start", async () => {
-            console.log("zaczynam obliczac zadanie!");
-            requestingClient = socket;
+        socket.on("start", async ({ workerIds }) => {
+            const selected = workerIds.filter(id => workers.has(id));
+            if (selected.length === 0) {
+                socket.emit("error", { msg: "Nie wybrano żadnej przeglądarki!" });
+                return;
+            }
+
+            activeClient = {
+                socket,
+                workerIds: selected
+            };
 
             await createTasks();
 
-            if (startTimer === null) {
-                startTimer = Date.now();
-            }
+            if (startTimer === null) startTimer = Date.now();
             Sending = true;
-            for (const worker of workers) {
-                if (taskQueue.length > 0) {
+
+            for (const id of selected) {
+                const worker = workers.get(id)?.socket;
+                if (worker && taskQueue.length > 0) {
                     const task = taskQueue.shift();
+                    task.clientId = socket.id;
                     worker.emit("task", task);
                     activeTasks++;
                 }
@@ -118,7 +129,7 @@ async function start() {
         socket.on("disconnect", () => {
             console.log("klient rozłączony:", socket.id);
         });
-    })
+    });
 
 
     server.listen(8080, () => {

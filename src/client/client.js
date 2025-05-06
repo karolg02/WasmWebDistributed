@@ -1,17 +1,40 @@
 const socket = io("http://localhost:8080/client");
 
-document.getElementById("start").addEventListener("click", () => {
-    socket.emit("start");
+const startButton = document.getElementById("start");
+const workerList = document.getElementById("workerList");
+
+startButton.addEventListener("click", () => {
+    const selectedWorkerIds = Array.from(
+        workerList.querySelectorAll("input[type='checkbox']:checked")
+    ).map(cb => cb.value);
+
+    if (selectedWorkerIds.length === 0) {
+        alert("Wybierz co najmniej jednego workera!");
+        return;
+    }
+
+    socket.emit("start", { workerIds: selectedWorkerIds });
 });
 
-socket.on("worker_update", (workerIds) => {
-    const ul = document.getElementById("workerList");
-    ul.innerHTML = "";
+socket.on("worker_update", (workers) => {
+    const workerList = document.getElementById("workerList");
+    workerList.innerHTML = "";
 
-    workerIds.forEach((id) => {
+    workers.forEach(({ id, name }) => {
         const li = document.createElement("li");
-        li.textContent = `Worker: ${id}`;
-        ul.appendChild(li);
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = id;
+        checkbox.id = `worker-${id}`;
+
+        const label = document.createElement("label");
+        label.htmlFor = checkbox.id;
+        label.innerText = name || id;
+
+        li.appendChild(checkbox);
+        li.appendChild(label);
+        workerList.appendChild(li);
     });
 });
 
