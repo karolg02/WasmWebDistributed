@@ -32,7 +32,11 @@
     Module.onRuntimeInitialized = () => {
         let localTotal = 0;
         socket.on("task", (data) => {
+            const t0 = performance.now();
             const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
+            const t1 = performance.now();
+
+            const duration = (t1 - t0).toFixed(2);
 
             document.getElementById("result").textContent = result.toFixed(6);
             localTotal += result;
@@ -41,7 +45,8 @@
             socket.emit("result", {
                 taskId: data.taskId,
                 clientId: data.clientId,
-                result: result
+                result: result,
+                duration: parseFloat(duration)
             });
         });
     };

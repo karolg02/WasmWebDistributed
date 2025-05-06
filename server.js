@@ -1,30 +1,19 @@
-const { Server } = require('socket.io');
-const amqp = require('amqplib');
-const http = require('http');
-const { createTasks } = require('./create_tasks');
+const { Server } = require("socket.io");
+const amqp = require("amqplib");
+const http = require("http");
+const { createTasks } = require("./create_tasks");
 
 const server = http.createServer();
 const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-//zadanie
-let sum = 0;
-
-//kolejka
-const taskQueue = [];
-let activeTasks = 0;
-
-//workerzy
 const workers = new Map();
-let Sending = false;
-const workerTasks = new Map();
+const clientSockets = new Map();
+const clientTasks = new Map();
 
-//timery
-let startTimer = null;
-
-//klienci
-
+let channel = null;
+let connection = null;
 
 async function broadcastWorkerList() {
     const list = Array.from(workers.entries()).map(([id, { name }]) => ({
@@ -34,107 +23,112 @@ async function broadcastWorkerList() {
     io.of("/client").emit("worker_update", list);
 }
 
+// konusment z rabbitmq dla danego workera
+async function createPerWorkerConsumer(workerId, socket) {
+    const queueName = `tasks.worker_${workerId}`;
+    await channel.assertQueue(queueName);
 
-async function start() {
-    const connection = await amqp.connect("amqp://localhost");
-    const channel = await connection.createChannel();
-    channel.assertQueue("tasks");
-
-    //tu konsumuje z rabbitmq + pomiar
-    channel.consume("tasks", (msg) => {
+    channel.consume(queueName, (msg) => {
         const task = JSON.parse(msg.content.toString());
-        taskQueue.push(task);
+        socket.emit("task", task);
         channel.ack(msg);
     });
+}
 
-    //tu dzialanie workerow
-    io.of("/worker").on("connection", (socket) => {
-        console.log("Podlaczono workera: ", socket.id);
+async function start() {
+    connection = await amqp.connect("amqp://localhost");
+    channel = await connection.createChannel();
 
-        socket.on("register", (data) => {
+    // workerzy
+    io.of("/worker").on("connection", async (socket) => {
+        console.log("Połączono workera:", socket.id);
+
+        socket.on("register", async (data) => {
             const name = data.name || `Worker-${socket.id}`;
             workers.set(socket.id, { socket, name });
+            await createPerWorkerConsumer(socket.id, socket);
             broadcastWorkerList();
-        })
+        });
 
         socket.on("disconnect", () => {
-            console.log("Worker odlaczony", socket.id);
+            console.log("Worker rozłączony:", socket.id);
             workers.delete(socket.id);
             broadcastWorkerList();
         });
 
         socket.on("result", (data) => {
-            sum += data.result;
-            activeTasks--;
-            console.log(`${socket.id}: ${data.result}: suma(${sum})`);
+            const { clientId, result } = data;
+            const client = clientTasks.get(clientId);
 
-            if (taskQueue.length > 0 && Sending) {
-                for (const id of activeClient.workerIds) {
-                    const worker = workers.get(id)?.socket;
-                    if (worker && taskQueue.length > 0) {
-                        const task = taskQueue.shift();
-                        task.clientId = activeClient.socket.id;
-                        worker.emit("task", task);
-                        activeTasks++;
-                    }
-                }
-            } else if (taskQueue.length === 0 && Sending && activeTasks === 0) {
-                //koniec roboty
-                const durationSeconds = ((Date.now() - startTimer) / 1000).toFixed(2);
-                Sending = false;
+            if (client.completed === 0) {
+                client.start = Date.now();
+            }
 
-                activeClient.socket.emit("final_result", {
-                    sum: parseFloat(sum.toFixed(6)),
+            client.sum += result;
+            client.completed++;
+
+            client.socket.emit("task_progress", {
+                done: client.completed,
+                total: client.expected
+            });
+
+            if (client.completed === client.expected) {
+                const durationSeconds = ((Date.now() - client.start) / 1000).toFixed(2);
+                client.socket.emit("final_result", {
+                    sum: parseFloat(client.sum.toFixed(6)),
                     duration: durationSeconds
                 });
 
-                sum = 0;
-                startTimer = null;
-                activeClient = null;
+                clientTasks.delete(clientId);
             }
         });
-    })
+    });
 
-    //tu dzialanie klientow
+    // klienci
     io.of("/client").on("connection", (socket) => {
-        console.log("Klient podlaczony", socket.id);
+        console.log("Klient podłączony:", socket.id);
+        clientSockets.set(socket.id, socket);
         broadcastWorkerList();
 
         socket.on("start", async ({ workerIds }) => {
             const selected = workerIds.filter(id => workers.has(id));
             if (selected.length === 0) {
-                socket.emit("error", { msg: "Nie wybrano żadnej przeglądarki!" });
+                socket.emit("error", { msg: "Nie wybrano żadnego workera!" });
                 return;
             }
 
-            activeClient = {
+            const tasks = await createTasks();
+            const clientId = socket.id;
+
+            clientTasks.set(clientId, {
                 socket,
-                workerIds: selected
-            };
+                workerIds: selected,
+                expected: tasks.length,
+                completed: 0,
+                sum: 0,
+                start: 0
+            });
 
-            await createTasks();
-
-            if (startTimer === null) startTimer = Date.now();
-            Sending = true;
-
-            for (const id of selected) {
-                const worker = workers.get(id)?.socket;
-                if (worker && taskQueue.length > 0) {
-                    const task = taskQueue.shift();
-                    task.clientId = socket.id;
-                    worker.emit("task", task);
-                    activeTasks++;
-                }
+            // Round-robin: rozdziel zadania do kolejek per-worker
+            let i = 0;
+            for (const task of tasks) {
+                const workerId = selected[i % selected.length];
+                const queueName = `tasks.worker_${workerId}`;
+                task.clientId = clientId;
+                await channel.sendToQueue(queueName, Buffer.from(JSON.stringify(task)));
+                i++;
             }
-        })
+        });
+
         socket.on("disconnect", () => {
-            console.log("klient rozłączony:", socket.id);
+            console.log("Klient rozłączony:", socket.id);
+            clientSockets.delete(socket.id);
+            clientTasks.delete(socket.id);
         });
     });
 
-
     server.listen(8080, () => {
-        console.log("Nasluchuje na porcie 8080");
+        console.log("Nasłuchuję na porcie 8080");
     });
 }
 

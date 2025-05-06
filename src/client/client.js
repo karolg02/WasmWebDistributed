@@ -42,3 +42,7 @@ socket.on("final_result", (data) => {
     document.getElementById("global-result").textContent = data.sum.toFixed(6);
     document.getElementById("duration").textContent = data.duration;
 });
+
+socket.on("task_progress", ({ done, total }) => {
+    document.getElementById("progress").textContent = `${done} / ${total}`;
+});
