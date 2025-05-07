@@ -1,10 +1,10 @@
 #!/bin/bash
 
 echo "🟡      Runs RabbitMQ      🟡"
-sudo systemctl start rabbitmq.service
+sudo systemctl start rabbitmq
 
 echo "🟡  Runs worker http 8000  🟡"
-(cd src/public && python3 -m http.server 8000) &
+(cd src/worker && python3 -m http.server 8000) &
 PID1=$!
 
 echo "🟡  Runs client http 3000  🟡"
@@ -15,15 +15,15 @@ trap cleanup INT
 
 cleanup() {
     echo ""
-    echo "🛑 HTTP 🛑"
+    echo "🛑           HTTP         🛑"
     kill $PID1
     kill $PID2
 
-    echo "🛑 RabbitMQ 🛑"
+    echo "🛑        RabbitMQ        🛑"
     sudo rabbitmqctl purge_queue tasks
     sudo systemctl stop rabbitmq
 
-    echo "🟢     Zamknięto        🟢"
+    echo "🟢        Zamknięto       🟢"
     exit 0
 }
 

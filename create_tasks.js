@@ -20,8 +20,6 @@ async function createTasks() {
         };
         tasks.push(task);
     }
-
-    console.log("Dodano zadania:", tasks.length);
     return tasks;
 }
 

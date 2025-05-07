@@ -8,8 +8,10 @@
 </head>
 
 <body>
+    <!--
     <p>Wynik jednostkowy: <span id="result"></span></p>
     <p>Wynik caly dla przegladarki: <span id="final_result"></span></p>
+    -->
 </body>
 <script src="benchmark/benchmark.js"></script>
 <script src="index.js"></script>
@@ -38,9 +40,10 @@
 
             const duration = (t1 - t0).toFixed(2);
 
-            document.getElementById("result").textContent = result.toFixed(6);
+            //do debugowania
+            //document.getElementById("result").textContent = result.toFixed(6);
             localTotal += result;
-            document.getElementById("final_result").textContent = localTotal.toFixed(6);
+            //document.getElementById("final_result").textContent = localTotal.toFixed(6);
 
             socket.emit("result", {
                 taskId: data.taskId,
