@@ -3,6 +3,7 @@
 sudo ufw allow 3000
 sudo ufw allow 8000
 sudo ufw allow 8080
+sudo ufw allow 8090
 
 echo "🟡      Runs RabbitMQ      🟡"
 sudo systemctl start rabbitmq
@@ -26,6 +27,7 @@ cleanup() {
     sudo ufw delete allow 3000
     sudo ufw delete allow 8000
     sudo ufw delete allow 8080
+    sudo ufw delete allow 8090
 
     echo "🛑 RabbitMQ 🛑"
     sudo rabbitmqctl purge_queue tasks

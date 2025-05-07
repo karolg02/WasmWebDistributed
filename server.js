@@ -2,10 +2,18 @@ const { Server } = require("socket.io");
 const amqp = require("amqplib");
 const http = require("http");
 const { createTasks } = require("./create_tasks");
+const { io: ioClient } = require("socket.io-client");
 
 const server = http.createServer();
 const io = new Server(server, {
     cors: { origin: "*" }
+});
+
+//polaczenie z resultManagerem
+const resultManagerSocket = ioClient("http://localhost:8090/client");
+
+resultManagerSocket.on("connect", () => {
+    console.log("[Server] Connected to ResultManager!");
 });
 
 const workers = new Map();
@@ -26,7 +34,7 @@ async function broadcastWorkerList() {
     io.of("/client").emit("worker_update", list);
 }
 
-async function createPerWorkerConsumer(workerId, socket) {
+async function createQueuePerClient(workerId, socket) {
     const queueName = `tasks.worker_${workerId}`;
     await channel.assertQueue(queueName);
 
@@ -59,25 +67,26 @@ async function tryToGiveTasksForWaitingClients() {
         const allFree = pending.workerIds.every(id => !workerLocks.has(id));
         if (!allFree) continue;
 
-        // blokujemy workera
         for (const id of pending.workerIds) {
             workerLocks.set(id, clientId);
             const q = workerQueue.get(id);
-            if (q && q[0] === clientId) q.shift(); // usuwanie z kolejki
+            if (q && q[0] === clientId) q.shift();
         }
 
         waitingClients.delete(clientId);
 
         clientTasks.set(clientId, {
             socket: pending.socket,
-            workerIds: pending.workerIds,
-            expected: pending.tasks.length,
-            completed: 0,
-            sum: 0,
-            start: 0
+            workerIds: pending.workerIds
         });
 
-        console.log(`Wystartowano oczekującego klienta ${clientId}`);
+        //zglaszam klienta do resultManagera
+        resultManagerSocket.emit("init_client", {
+            clientId,
+            expected: pending.tasks.length
+        });
+
+        console.log(`Time for ${clientId} tasks`);
         await sendTasksInBatches(pending.tasks, clientId, pending.workerIds);
     }
 }
@@ -86,72 +95,35 @@ async function start() {
     connection = await amqp.connect("amqp://localhost");
     channel = await connection.createChannel();
 
-    // workerzy
+    //workerzy
     io.of("/worker").on("connection", async (socket) => {
-        console.log("Połączono workera:", socket.id);
+        console.log("[Worker] Connected", socket.id);
 
         socket.on("register", async (data) => {
             const name = data.name || `Worker-${socket.id}`;
             workers.set(socket.id, { socket, name });
-            await createPerWorkerConsumer(socket.id, socket);
+            await createQueuePerClient(socket.id, socket);
             broadcastWorkerList();
         });
 
         socket.on("disconnect", () => {
-            console.log("Worker rozłączony:", socket.id);
+            console.log("[Worker] Disconnected", socket.id);
             workers.delete(socket.id);
-
             if (workerLocks.has(socket.id)) {
                 workerLocks.delete(socket.id);
             }
-
             broadcastWorkerList();
-        });
-
-        socket.on("result", async (data) => {
-            const { clientId, result } = data;
-            const client = clientTasks.get(clientId);
-            if (!client) return;
-
-            if (client.completed === 0) {
-                client.start = Date.now();
-            }
-
-            client.sum += result;
-            client.completed++;
-
-            if (client.completed === client.expected) {
-                const durationSeconds = ((Date.now() - client.start) / 1000).toFixed(2);
-                client.socket.emit("final_result", {
-                    sum: parseFloat(client.sum.toFixed(6)),
-                    duration: durationSeconds
-                });
-
-                for (const wid of client.workerIds) {
-                    if (workerLocks.get(wid) === clientId) {
-                        workerLocks.delete(wid);
-                    }
-                }
-
-                clientTasks.delete(clientId);
-
-                await tryToGiveTasksForWaitingClients();
-            }
         });
     });
 
-    // klienci
+    //klienci
     io.of("/client").on("connection", (socket) => {
-        console.log("Klient podłączony:", socket.id);
+        console.log("[Client] Connected", socket.id);
         clientSockets.set(socket.id, socket);
         broadcastWorkerList();
 
         socket.on("start", async ({ workerIds }) => {
             const selected = workerIds.filter(id => workers.has(id));
-            if (selected.length === 0) {
-                socket.emit("error", { msg: "Nie wybrano żadnego workera!" });
-                return;
-            }
 
             const tasks = await createTasks();
             const allAvailable = selected.every(id => !workerLocks.has(id));
@@ -164,14 +136,16 @@ async function start() {
 
                 clientTasks.set(clientId, {
                     socket,
-                    workerIds: selected,
-                    expected: tasks.length,
-                    completed: 0,
-                    sum: 0,
-                    start: 0
+                    workerIds: selected
                 });
 
-                console.log(`Rozpoczynam rozdzielanie ${tasks.length} zadań dla klienta ${clientId} na ${selected.length} workerów`);
+                //rejestracja klienta do resultManagera
+                resultManagerSocket.emit("init_client", {
+                    clientId,
+                    expected: tasks.length
+                });
+
+                //console.log(`Starting to separate ${tasks.length} tasks for client ${clientId}`);
                 await sendTasksInBatches(tasks, clientId, selected);
             } else {
                 waitingClients.set(clientId, { socket, workerIds: selected, tasks });
@@ -186,12 +160,12 @@ async function start() {
                     }
                 }
 
-                console.log(`Klient ${clientId} oczekuje na dostęp do workerów: ${selected.join(", ")}`);
+                //console.log(`Client ${clientId} waits for: ${selected.join(", ")}`);
             }
         });
 
         socket.on("disconnect", () => {
-            console.log("Klient rozłączony:", socket.id);
+            console.log("[Client] Disconnected", socket.id);
             clientSockets.delete(socket.id);
 
             const taskInfo = clientTasks.get(socket.id);
@@ -203,7 +177,7 @@ async function start() {
                 }
                 clientTasks.delete(socket.id);
             }
-            //jezeli czekal w kolejce to zwalniamy slota
+
             waitingClients.delete(socket.id);
             for (const [wid, queue] of workerQueue.entries()) {
                 workerQueue.set(wid, queue.filter(cid => cid !== socket.id));
@@ -211,8 +185,38 @@ async function start() {
         });
     });
 
+    //resultManager
+    io.of("/aggregator").on("connection", (socket) => {
+        // socket.on("task_progress", ({ clientId, done, total }) => {
+        //     const clientSocket = clientSockets.get(clientId);
+        //     if (clientSocket) {
+        //         clientSocket.emit("task_progress", { done, total });
+        //     }
+        // });
+
+        socket.on("final_result", ({ clientId, sum, duration }) => {
+            const clientSocket = clientSockets.get(clientId);
+            if (clientSocket) {
+                clientSocket.emit("final_result", { sum, duration });
+
+                //brak zadan to przydzielam workera
+                const info = clientTasks.get(clientId);
+                if (info) {
+                    for (const wid of info.workerIds) {
+                        if (workerLocks.get(wid) === clientId) {
+                            workerLocks.delete(wid);
+                        }
+                    }
+                    clientTasks.delete(clientId);
+                }
+
+                tryToGiveTasksForWaitingClients();
+            }
+        });
+    });
+
     server.listen(8080, () => {
-        console.log("Nasłuchuję na porcie 8080");
+        console.log("[Server] Listening on port 8080");
     });
 }
 

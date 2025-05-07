@@ -17,7 +17,6 @@ startButton.addEventListener("click", () => {
 });
 
 socket.on("worker_update", (workers) => {
-    const workerList = document.getElementById("workerList");
     workerList.innerHTML = "";
 
     workers.forEach(({ id, name }) => {
@@ -38,11 +37,12 @@ socket.on("worker_update", (workers) => {
     });
 });
 
+// socket.on("task_progress", ({ done, total }) => {
+//     document.getElementById("progress").textContent = `${done} / ${total}`;
+// });
+
 socket.on("final_result", (data) => {
+    console.log("Otrzymano final_result z serwera");
     document.getElementById("global-result").textContent = data.sum.toFixed(6);
     document.getElementById("duration").textContent = data.duration;
-});
-
-socket.on("task_progress", ({ done, total }) => {
-    document.getElementById("progress").textContent = `${done} / ${total}`;
 });

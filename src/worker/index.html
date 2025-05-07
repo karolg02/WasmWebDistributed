@@ -17,6 +17,8 @@
 <script src="index.js"></script>
 <script>
     const socket = io(`http://${window.location.hostname}:8080/worker`);
+    const resultSocket = io(`http://${window.location.hostname}:8090/worker`);
+
 
     let score;
     BenchmarkModule().then(benchmark => {
@@ -32,7 +34,7 @@
         });
     });
     Module.onRuntimeInitialized = () => {
-        let localTotal = 0;
+        //let localTotal = 0;
         socket.on("task", (data) => {
             const t0 = performance.now();
             const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
@@ -42,15 +44,16 @@
 
             //do debugowania
             //document.getElementById("result").textContent = result.toFixed(6);
-            localTotal += result;
+            //localTotal += result;
             //document.getElementById("final_result").textContent = localTotal.toFixed(6);
 
-            socket.emit("result", {
+            resultSocket.emit("result", {
                 taskId: data.taskId,
                 clientId: data.clientId,
                 result: result,
                 duration: parseFloat(duration)
             });
+
         });
     };
 </script>
