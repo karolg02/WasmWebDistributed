@@ -3,6 +3,7 @@ async function createQueuePerClient(channel, workerId, socket) {
     await channel.assertQueue(queueName);
 
     channel.consume(queueName, (msg) => {
+        if (!msg) return;
         const task = JSON.parse(msg.content.toString());
         socket.emit("task", task);
         channel.ack(msg);

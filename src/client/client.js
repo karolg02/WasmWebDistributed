@@ -42,7 +42,6 @@ socket.on("worker_update", (workers) => {
 // });
 
 socket.on("final_result", (data) => {
-    console.log("Otrzymano final_result z serwera");
     document.getElementById("global-result").textContent = data.sum.toFixed(6);
     document.getElementById("duration").textContent = data.duration;
 });

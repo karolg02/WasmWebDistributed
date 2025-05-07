@@ -8,7 +8,7 @@ const io = new Server(server, {
 });
 
 //polaczenie z glownym serwerem
-const mainServer = ioClient("http://localhost:8080/aggregator");
+const mainServer = ioClient("http://localhost:8080/resultManager");
 
 const clientStates = new Map();
 

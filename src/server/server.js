@@ -25,7 +25,6 @@ const workerQueue = new Map();
 const waitingClients = new Map();
 
 let channel = null;
-//exports.channel = channel;
 let connection = null;
 
 async function broadcastWorkerList() {
@@ -36,7 +35,7 @@ async function broadcastWorkerList() {
     io.of("/client").emit("worker_update", list);
 }
 
-async function sendTasksInBatches(tasks, clientId, selectedWorkerIds, batchSize = 1000) {
+async function tasksDevider3000(tasks, clientId, selectedWorkerIds, batchSize = 1000) {
     let i = 0;
     while (i < tasks.length) {
         const batch = tasks.slice(i, i + batchSize);
@@ -78,7 +77,7 @@ async function tryToGiveTasksForWaitingClients() {
         });
 
         console.log(`Time for ${clientId} tasks`);
-        await sendTasksInBatches(pending.tasks, clientId, pending.workerIds);
+        await tasksDevider3000(pending.tasks, clientId, pending.workerIds);
     }
 }
 
@@ -99,6 +98,8 @@ async function start() {
 
         socket.on("disconnect", () => {
             console.log("[Worker] Disconnected", socket.id);
+            const queueName = `tasks.worker_${socket.id}`;
+            channel.deleteQueue(queueName);
             workers.delete(socket.id);
             if (workerLocks.has(socket.id)) {
                 workerLocks.delete(socket.id);
@@ -137,7 +138,7 @@ async function start() {
                 });
 
                 //console.log(`Starting to separate ${tasks.length} tasks for client ${clientId}`);
-                await sendTasksInBatches(tasks, clientId, selected);
+                await tasksDevider3000(tasks, clientId, selected);
             } else {
                 waitingClients.set(clientId, { socket, workerIds: selected, tasks });
 
@@ -177,7 +178,7 @@ async function start() {
     });
 
     //resultManager
-    io.of("/aggregator").on("connection", (socket) => {
+    io.of("/resultManager").on("connection", (socket) => {
         // socket.on("task_progress", ({ clientId, done, total }) => {
         //     const clientSocket = clientSockets.get(clientId);
         //     if (clientSocket) {
