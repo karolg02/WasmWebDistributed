@@ -1,8 +1,9 @@
 const { Server } = require("socket.io");
 const amqp = require("amqplib");
 const http = require("http");
-const { createTasks } = require("./create_tasks");
+const { createTasks } = require("../../create_tasks");
 const { io: ioClient } = require("socket.io-client");
+const { createQueuePerClient } = require("./modules/queue");
 
 const server = http.createServer();
 const io = new Server(server, {
@@ -24,6 +25,7 @@ const workerQueue = new Map();
 const waitingClients = new Map();
 
 let channel = null;
+//exports.channel = channel;
 let connection = null;
 
 async function broadcastWorkerList() {
@@ -32,17 +34,6 @@ async function broadcastWorkerList() {
         name
     }));
     io.of("/client").emit("worker_update", list);
-}
-
-async function createQueuePerClient(workerId, socket) {
-    const queueName = `tasks.worker_${workerId}`;
-    await channel.assertQueue(queueName);
-
-    channel.consume(queueName, (msg) => {
-        const task = JSON.parse(msg.content.toString());
-        socket.emit("task", task);
-        channel.ack(msg);
-    });
 }
 
 async function sendTasksInBatches(tasks, clientId, selectedWorkerIds, batchSize = 1000) {
@@ -102,7 +93,7 @@ async function start() {
         socket.on("register", async (data) => {
             const name = data.name || `Worker-${socket.id}`;
             workers.set(socket.id, { socket, name });
-            await createQueuePerClient(socket.id, socket);
+            await createQueuePerClient(channel, socket.id, socket);
             broadcastWorkerList();
         });
 
