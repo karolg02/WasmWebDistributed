@@ -55,13 +55,6 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, batchSize = 
         remaining--;
     }
 
-    console.log(`[Task Divider] Client ${clientId} → Task distribution:`);
-
-    for (const { id, count } of taskCountPerWorker) {
-        const name = workers.get(id)?.name || id;
-        console.log(`  - ${name} (ID: ${id}) gets ${count} tasks`);
-    }
-
     let i = 0;
     for (const { id, count } of taskCountPerWorker) {
         const queueName = `tasks.worker_${id}`;

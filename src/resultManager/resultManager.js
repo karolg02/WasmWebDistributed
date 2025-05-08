@@ -16,9 +16,9 @@ io.of("/worker").on("connection", (socket) => {
     socket.on("ping_resultSocket", () => {
         socket.emit("pong_resultSocket");
     });
-    socket.on("result", (data) => {
-        const { clientId, result } = data;
 
+    socket.on("batch_result", (data) => {
+        const { clientId, result, tasksCount } = data;
         const state = clientStates.get(clientId);
 
         if (state.completed === 0) {
@@ -26,13 +26,7 @@ io.of("/worker").on("connection", (socket) => {
         }
 
         state.sum += result;
-        state.completed++;
-
-        // mainServer.emit("task_progress", {
-        //     clientId,
-        //     done: state.completed,
-        //     total: state.expected
-        // });
+        state.completed += tasksCount;
 
         if (state.completed === state.expected) {
             const durationSeconds = ((Date.now() - state.start) / 1000).toFixed(2);

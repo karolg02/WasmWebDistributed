@@ -39,25 +39,29 @@
         });
     });
     Module.onRuntimeInitialized = () => {
-        //let localTotal = 0;
         socket.on("task_batch", (batch) => {
+            const subBatchSize = Math.max(10, Math.ceil(latency / 5));
+            let batchSum = 0;
+            let taskCount = 0;
+            let firstTaskId = batch[0].taskId;
+            let clientId = batch[0].clientId;
+
             for (const data of batch) {
-                //const t0 = performance.now();
                 const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
-                //const t1 = performance.now();
+                batchSum += result;
+                taskCount++;
 
-                //const duration = (t1 - t0).toFixed(2);
+                if (taskCount >= subBatchSize || taskCount === batch.length) {
+                    resultSocket.emit("batch_result", {
+                        batchId: firstTaskId,
+                        clientId: clientId,
+                        result: batchSum,
+                        tasksCount: taskCount
+                    });
 
-                //do debugowania
-                //document.getElementById("result").textContent = result.toFixed(6);
-                //localTotal += result;
-                //document.getElementById("final_result").textContent = localTotal.toFixed(6);
-
-                resultSocket.emit("result", {
-                    taskId: data.taskId,
-                    clientId: data.clientId,
-                    result: result,
-                });
+                    batchSum = 0;
+                    taskCount = 0;
+                }
             }
         });
     };
