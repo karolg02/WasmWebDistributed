@@ -34,21 +34,46 @@ async function broadcastWorkerList() {
     }));
     io.of("/client").emit("worker_update", list);
 }
+//lepszy podzial zadan
+async function tasksDevider3000(tasks, clientId, selectedWorkerIds, batchSize = 100) {
+    const benchmarks = selectedWorkerIds.map(id => ({
+        id,
+        benchmarkScore: workers.get(id)?.benchmarkScore
+    }));
 
-async function tasksDevider3000(tasks, clientId, selectedWorkerIds, batchSize = 1000) {
+    const totalBenchmarkScore = benchmarks.reduce((sum, worker) => sum + worker.benchmarkScore, 0);
+
+    const taskCountPerWorker = benchmarks.map(worker => ({
+        id: worker.id,
+        count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length)
+    }));
+
+    let assigned = taskCountPerWorker.reduce((sum, worker) => sum + worker.count, 0);
+    let remaining = tasks.length - assigned;
+    for (let i = 0; remaining > 0 && i < taskCountPerWorker.length; i++) {
+        taskCountPerWorker[i].count += 1;
+        remaining--;
+    }
+
+    console.log(`[Task Divider] Client ${clientId} → Task distribution:`);
+
+    for (const { id, count } of taskCountPerWorker) {
+        const name = workers.get(id)?.name || id;
+        console.log(`  - ${name} (ID: ${id}) gets ${count} tasks`);
+    }
+
     let i = 0;
-    while (i < tasks.length) {
-        const batch = tasks.slice(i, i + batchSize);
-        let j = 0;
-        for (const task of batch) {
-            const workerId = selectedWorkerIds[j % selectedWorkerIds.length];
-            const queueName = `tasks.worker_${workerId}`;
-            task.clientId = clientId;
-            channel.sendToQueue(queueName, Buffer.from(JSON.stringify(task)));
-            j++;
+    for (const { id, count } of taskCountPerWorker) {
+        const queueName = `tasks.worker_${id}`;
+        for (let j = 0; j < count; j += batchSize) {
+            const batch = [];
+            for (let k = 0; k < batchSize && i < tasks.length; k++, i++) {
+                const task = tasks[i];
+                task.clientId = clientId;
+                batch.push(task);
+            }
+            channel.sendToQueue(queueName, Buffer.from(JSON.stringify(batch)));
         }
-        i += batchSize;
-        await new Promise(resolve => setImmediate(resolve));
     }
 }
 
@@ -91,7 +116,9 @@ async function start() {
 
         socket.on("register", async (data) => {
             const name = data.name || `Worker-${socket.id}`;
-            workers.set(socket.id, { socket, name });
+            const benchmarkScore = data.benchmarkScore || 1;
+
+            workers.set(socket.id, { socket, name, benchmarkScore });
             await createQueuePerClient(channel, socket.id, socket);
             broadcastWorkerList();
         });

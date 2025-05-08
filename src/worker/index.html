@@ -8,10 +8,6 @@
 </head>
 
 <body>
-    <!--
-    <p>Wynik jednostkowy: <span id="result"></span></p>
-    <p>Wynik caly dla przegladarki: <span id="final_result"></span></p>
-    -->
 </body>
 <script src="benchmark/benchmark.js"></script>
 <script src="index.js"></script>
@@ -25,35 +21,37 @@
         const t0 = performance.now();
         benchmark.ccall("benchmark");
         const t1 = performance.now();
-        score = (t1 - t0).toFixed(2);
+        //kwestia dyskusyjna czy tutaj wplywa na wydajnosc zaokraglenie wyniku /==/ do rozstrzygniecia
+        score = (1 / (t1 - t0).toFixed(2)).toFixed(4) * 1000;
 
         const browserInfo = `System: ${navigator.platform}, moc przeglądarki: ${score}`;
 
         socket.on("connect", () => {
-            socket.emit("register", { name: browserInfo });
+            socket.emit("register", { name: browserInfo, benchmarkScore: parseFloat(score) });
         });
     });
     Module.onRuntimeInitialized = () => {
         //let localTotal = 0;
-        socket.on("task", (data) => {
-            const t0 = performance.now();
-            const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
-            const t1 = performance.now();
+        socket.on("task_batch", (batch) => {
+            for (const data of batch) {
+                //const t0 = performance.now();
+                const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
+                //const t1 = performance.now();
 
-            const duration = (t1 - t0).toFixed(2);
+                //const duration = (t1 - t0).toFixed(2);
 
-            //do debugowania
-            //document.getElementById("result").textContent = result.toFixed(6);
-            //localTotal += result;
-            //document.getElementById("final_result").textContent = localTotal.toFixed(6);
+                //do debugowania
+                //document.getElementById("result").textContent = result.toFixed(6);
+                //localTotal += result;
+                //document.getElementById("final_result").textContent = localTotal.toFixed(6);
 
-            resultSocket.emit("result", {
-                taskId: data.taskId,
-                clientId: data.clientId,
-                result: result,
-                duration: parseFloat(duration)
-            });
-
+                resultSocket.emit("result", {
+                    taskId: data.taskId,
+                    clientId: data.clientId,
+                    result: result,
+                    //duration: parseFloat(duration)
+                });
+            }
         });
     };
 </script>
