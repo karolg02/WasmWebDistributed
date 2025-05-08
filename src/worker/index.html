@@ -15,8 +15,8 @@
     const socket = io(`http://${window.location.hostname}:8080/worker`);
     const resultSocket = io(`http://${window.location.hostname}:8090/worker`);
 
-
     let score;
+    let latency;
     BenchmarkModule().then(benchmark => {
         const t0 = performance.now();
         benchmark.ccall("benchmark");
@@ -24,10 +24,19 @@
         //kwestia dyskusyjna czy tutaj wplywa na wydajnosc zaokraglenie wyniku /==/ do rozstrzygniecia
         score = (1 / (t1 - t0).toFixed(2)).toFixed(4) * 1000;
 
-        const browserInfo = `System: ${navigator.platform}, moc przeglądarki: ${score}`;
-
         socket.on("connect", () => {
-            socket.emit("register", { name: browserInfo, benchmarkScore: parseFloat(score) });
+            const pingStart = performance.now();
+
+            resultSocket.emit("ping_resultSocket");
+
+            resultSocket.on("pong_resultSocket", () => {
+                latency = (performance.now() - pingStart).toFixed(2);
+
+                const finalScore = (score / latency).toFixed(2);
+                const browserInfo = `System: ${navigator.platform}, moc przeglądarki: ${score}, ping: ${latency} all: ${finalScore}`;
+
+                socket.emit("register", { name: browserInfo, benchmarkScore: parseFloat(finalScore) });
+            });
         });
     });
     Module.onRuntimeInitialized = () => {
@@ -49,7 +58,6 @@
                     taskId: data.taskId,
                     clientId: data.clientId,
                     result: result,
-                    //duration: parseFloat(duration)
                 });
             }
         });

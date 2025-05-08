@@ -13,8 +13,11 @@ const mainServer = ioClient("http://localhost:8080/resultManager");
 const clientStates = new Map();
 
 io.of("/worker").on("connection", (socket) => {
+    socket.on("ping_resultSocket", () => {
+        socket.emit("pong_resultSocket");
+    });
     socket.on("result", (data) => {
-        const { clientId, result, duration } = data;
+        const { clientId, result } = data;
 
         const state = clientStates.get(clientId);
 
