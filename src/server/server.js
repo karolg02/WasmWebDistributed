@@ -35,7 +35,7 @@ async function broadcastWorkerList() {
     io.of("/client").emit("worker_update", list);
 }
 //lepszy podzial zadan
-async function tasksDevider3000(tasks, clientId, selectedWorkerIds, batchSize = 100) {
+async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
     const benchmarks = selectedWorkerIds.map(id => ({
         id,
         benchmarkScore: workers.get(id)?.benchmarkScore
@@ -45,7 +45,8 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, batchSize = 
 
     const taskCountPerWorker = benchmarks.map(worker => ({
         id: worker.id,
-        count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length)
+        count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length),
+        batchSize: Math.max(50, Math.min(500, Math.floor(worker.benchmarkScore * 200)))
     }));
 
     let assigned = taskCountPerWorker.reduce((sum, worker) => sum + worker.count, 0);
@@ -56,7 +57,7 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, batchSize = 
     }
 
     let i = 0;
-    for (const { id, count } of taskCountPerWorker) {
+    for (const { id, count, batchSize } of taskCountPerWorker) {
         const queueName = `tasks.worker_${id}`;
         for (let j = 0; j < count; j += batchSize) {
             const batch = [];

@@ -40,7 +40,11 @@
     });
     Module.onRuntimeInitialized = () => {
         socket.on("task_batch", (batch) => {
-            const subBatchSize = Math.max(10, Math.ceil(latency / 5));
+            const subBatchSize = Math.max(10, Math.min(
+                100,
+                Math.ceil((score * 100) / latency)
+            ));
+
             let batchSum = 0;
             let taskCount = 0;
             let firstTaskId = batch[0].taskId;
