@@ -1,9 +1,11 @@
 const socket = io(`http://${window.location.hostname}:8080/client`);
 
-const startButton = document.getElementById("start");
+const taskForm = document.getElementById("taskForm");
 const workerList = document.getElementById("workerList");
 
-startButton.addEventListener("click", () => {
+taskForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+
     const selectedWorkerIds = Array.from(
         workerList.querySelectorAll("input[type='checkbox']:checked")
     ).map(cb => cb.value);
@@ -13,7 +15,19 @@ startButton.addEventListener("click", () => {
         return;
     }
 
-    socket.emit("start", { workerIds: selectedWorkerIds });
+    const form = new FormData(taskForm);
+    const taskParams = Object.fromEntries(form.entries());
+
+    for (const key in taskParams) {
+        taskParams[key] = parseFloat(taskParams[key]);
+    }
+
+    console.log("[Client] Wysyłam start z parametrami:", taskParams, selectedWorkerIds);
+
+    socket.emit("start", {
+        workerIds: selectedWorkerIds,
+        taskParams: taskParams
+    });
 });
 
 socket.on("worker_update", (workers) => {

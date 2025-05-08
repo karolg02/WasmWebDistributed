@@ -32,10 +32,9 @@
             resultSocket.on("pong_resultSocket", () => {
                 latency = (performance.now() - pingStart).toFixed(2);
 
-                const finalScore = (score / latency).toFixed(2);
-                const browserInfo = `System: ${navigator.platform}, moc przeglądarki: ${score}, ping: ${latency} all: ${finalScore}`;
+                const browserInfo = `System: ${navigator.platform}, moc przeglądarki: ${score}, ping: ${latency}`;
 
-                socket.emit("register", { name: browserInfo, benchmarkScore: parseFloat(finalScore) });
+                socket.emit("register", { name: browserInfo, benchmarkScore: parseFloat(score) });
             });
         });
     });

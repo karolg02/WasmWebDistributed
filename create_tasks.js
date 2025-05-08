@@ -1,25 +1,20 @@
-async function createTasks() {
-    const start = 0;
-    const koniec = Math.PI;
-    const dx = 0.000001;
-    const N = 100000;
-
-    const fragment = (koniec - start) / N;
-
+async function createTasks({ a = 0, b = Math.PI, dx = 0.000001, N = 100000 }) {
+    const fragment = (b - a) / N;
     const tasks = [];
 
     for (let i = 0; i < N; i++) {
-        const a = start + i * fragment;
-        const b = a + fragment;
-        const task = {
+        const start = a + i * fragment;
+        const end = start + fragment;
+
+        tasks.push({
             type: "task",
-            a: a,
-            b: b,
+            a: start,
+            b: end,
             dx: dx,
             taskId: `task_${i}`
-        };
-        tasks.push(task);
+        });
     }
+
     return tasks;
 }
 

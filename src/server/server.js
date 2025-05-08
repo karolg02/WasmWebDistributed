@@ -141,10 +141,10 @@ async function start() {
         clientSockets.set(socket.id, socket);
         broadcastWorkerList();
 
-        socket.on("start", async ({ workerIds }) => {
+        socket.on("start", async ({ workerIds, taskParams }) => {
             const selected = workerIds.filter(id => workers.has(id));
 
-            const tasks = await createTasks();
+            const tasks = await createTasks(taskParams);
             const allAvailable = selected.every(id => !workerLocks.has(id));
             const clientId = socket.id;
 
