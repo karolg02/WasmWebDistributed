@@ -13,6 +13,7 @@ import {
     Stack,
     Group,
     Paper,
+    Progress,
 } from "@mantine/core";
 import { IconBrandChrome, IconBrandFirefox, IconBrandSafari, IconWorldWww } from "@tabler/icons-react";
 
@@ -25,6 +26,33 @@ interface TaskParams {
     N: number;
 }
 
+interface Progress {
+    done: number;
+    elapsedTime: number;
+}
+
+interface QueueStatus {
+    [workerId: string]: {
+        queueLength: number;
+        currentClient: string | null;
+        isAvailable: boolean;  // nowe pole
+    };
+}
+
+const formatTime = (seconds: number): string => {
+    if (seconds < 60) {
+        return `${seconds.toFixed(1)}s`;
+    } else if (seconds < 3600) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}m ${remainingSeconds.toFixed(0)}s`;
+    } else {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return `${hours}h ${minutes}m`;
+    }
+};
+
 export const ClientPanel: React.FC = () => {
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
@@ -34,26 +62,58 @@ export const ClientPanel: React.FC = () => {
         dx: 0.00001,
         N: 100000,
     });
-    // const [progress, setProgress] = useState({ done: 0, total: 0 });
+    const [progress, setProgress] = useState<Progress>({ done: 0, elapsedTime: 0 });
     const [result, setResult] = useState<number | null>(null);
     const [duration, setDuration] = useState<number | null>(null);
+    const [isCalculating, setIsCalculating] = useState(false);
+    const [startTime, setStartTime] = useState<number | null>(null);
+    const [tasksPerSecond, setTasksPerSecond] = useState<number | null>(null);
+    const [queueStatus, setQueueStatus] = useState<QueueStatus>({});
 
     useEffect(() => {
         socket.on("worker_update", (workerList: Worker[]) => {
             setWorkers(workerList);
         });
 
+        socket.on("task_progress", (data: { done: number; elapsedTime: number }) => {
+            setProgress(data);
+            setIsCalculating(true);
+        });
+
         socket.on("final_result", (data: { sum: number; duration: number }) => {
             setResult(data.sum);
             setDuration(data.duration);
+            setProgress({ done: 0, elapsedTime: 0 });
+            setIsCalculating(false);
+            setStartTime(null);
+            setTasksPerSecond(null);
+        });
+
+        socket.on("queue_status", (status: QueueStatus) => {
+            setQueueStatus(status);
         });
 
         return () => {
             socket.off("worker_update");
+            socket.off("task_progress");
             socket.off("final_result");
+            socket.off("queue_status");
         };
     }, []);
 
+    useEffect(() => {
+        if (!startTime || !isCalculating || progress.done === 0) return;
+
+        const currentTime = Date.now();
+        const elapsedSeconds = (currentTime - startTime) / 1000;
+        const currentTasksPerSecond = progress.done / elapsedSeconds;
+
+        if (!tasksPerSecond) {
+            setTasksPerSecond(currentTasksPerSecond);
+        } else {
+            setTasksPerSecond(prev => ((prev ?? 0) * 0.7) + (currentTasksPerSecond * 0.3));
+        }
+    }, [progress.done, startTime, isCalculating]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -61,6 +121,13 @@ export const ClientPanel: React.FC = () => {
             alert("Wybierz co najmniej jednego workera!");
             return;
         }
+
+        setIsCalculating(true);
+        setResult(null);
+        setDuration(null);
+        setStartTime(Date.now());
+        setTasksPerSecond(null);
+        setProgress({ done: 0, elapsedTime: 0 });
 
         socket.emit("start", {
             workerIds: selectedWorkerIds,
@@ -75,6 +142,113 @@ export const ClientPanel: React.FC = () => {
         return <IconWorldWww size={20} />;
     };
 
+    const calculateEstimatedTimeRemaining = () => {
+        if (!startTime || !isCalculating || progress.done === 0 || !tasksPerSecond) return null;
+
+        const remainingTasks = taskParams.N - progress.done;
+        if (remainingTasks <= 0) return null;
+
+        return remainingTasks / tasksPerSecond;
+    };
+
+    const renderWorkerCard = ({ id, name, specs, performance }: Worker) => {
+        const workerStatus = queueStatus[id];
+        const isInUse = workerStatus?.currentClient !== null;
+        const queueLength = workerStatus?.queueLength ?? 0;
+        const isCurrentUserInQueue = selectedWorkerIds.includes(id);
+        const isCurrentUserActive = workerStatus?.currentClient === socket.id;
+
+        const getWorkerStatus = () => {
+            // Jeśli worker wykonuje nasze zadanie
+            if (isCurrentUserActive) {
+                return {
+                    message: "Wykonuje twoje zadanie",
+                    color: "green",
+                    badge: null
+                };
+            }
+
+            // Jeśli worker wykonuje czyjeś zadanie
+            if (workerStatus?.currentClient) {
+                if (isCurrentUserInQueue) {
+                    return {
+                        message: "Zajęty",
+                        color: "orange",
+                        badge: `Jesteś ${queueLength}. w kolejce`
+                    };
+                }
+                return {
+                    message: "Zajęty",
+                    color: "red",
+                    badge: `W kolejce: ${queueLength}`
+                };
+            }
+
+            // Worker jest wolny
+            return {
+                message: "Dostępny",
+                color: "green",
+                badge: queueLength > 0 ? `W kolejce: ${queueLength}` : null
+            };
+        };
+
+        const status = getWorkerStatus();
+
+        return (
+            <Grid.Col span={{ base: 12, sm: 12, md: 6 }} key={id}>
+                <Card
+                    shadow="sm"
+                    padding="md"
+                    radius="md"
+                    withBorder
+                    style={{
+                        cursor: "pointer", // Zawsze pointer, bo można dodać do kolejki
+                        backgroundColor: selectedWorkerIds.includes(id) ? "#dcbfa1" : undefined,
+                        opacity: isInUse && !isCurrentUserActive && !isCurrentUserInQueue ? 0.8 : 1,
+                        transition: "all 0.2s ease",
+                    }}
+                    onClick={() => {
+                        // Zawsze pozwalamy na dodanie/usunięcie z kolejki
+                        setSelectedWorkerIds((prev) =>
+                            prev.includes(id) ? prev.filter((w) => w !== id) : [...prev, id]
+                        );
+                    }}
+                >
+                    <Group justify="space-between" align="flex-start">
+                        <Group gap="xs">
+                            {getBrowserIcon(specs.userAgent)}
+                            <Stack gap={2}>
+                                <Text size="sm" fw={500}>
+                                    {name || id}
+                                </Text>
+                                <Text size="xs" c="dimmed">
+                                    {specs.platform}
+                                </Text>
+                                <Group gap={5}>
+                                    <Text size="xs" c={status.color}>
+                                        {status.message}
+                                    </Text>
+                                    {status.badge && (
+                                        <Text size="xs" c="dimmed">
+                                            ({status.badge})
+                                        </Text>
+                                    )}
+                                </Group>
+                            </Stack>
+                        </Group>
+                        <Stack gap={2} align="flex-end">
+                            <Text size="xs">
+                                CPU: {specs.hardwareConcurrency} cores
+                            </Text>
+                            <Text size="xs">
+                                Score: {performance.benchmarkScore.toFixed(2)}
+                            </Text>
+                        </Stack>
+                    </Group>
+                </Card>
+            </Grid.Col>
+        );
+    };
 
     return (
         <Container size="md" py="xl">
@@ -156,35 +330,7 @@ export const ClientPanel: React.FC = () => {
                     <Text color="dimmed">Brak dostępnych workerów.</Text>
                 ) : (
                     <Grid gutter="md">
-                        {workers.map(({ id, name }) => (
-                            <Grid.Col span={{ base: 12, sm: 6, md: 4 }} key={id}>
-                                <Card
-                                    shadow="sm"
-                                    padding="md"
-                                    radius="md"
-                                    withBorder
-                                    style={{
-                                        cursor: "pointer",
-                                        backgroundColor: selectedWorkerIds.includes(id) ? "#dcbfa1" : undefined,
-                                        transition: "background-color 0.2s ease",
-                                    }}
-                                    onClick={() =>
-                                        setSelectedWorkerIds((prev) =>
-                                            prev.includes(id) ? prev.filter((w) => w !== id) : [...prev, id]
-                                        )
-                                    }
-                                >
-                                    <Group gap="xs" align="center">
-                                        {getBrowserIcon(name || id)}
-                                        <Text size="sm" fw={500} lh={1.4}>
-                                            {name || id}
-                                        </Text>
-                                    </Group>
-                                </Card>
-                            </Grid.Col>
-
-
-                        ))}
+                        {workers.map(worker => renderWorkerCard(worker))}
                     </Grid>
                 )}
 
@@ -193,7 +339,35 @@ export const ClientPanel: React.FC = () => {
                 <Title order={3} mb="xs">
                     Wyniki
                 </Title>
-                {/* <Text>Postęp: {progress.done} / {progress.total}</Text> */}
+                {isCalculating && (
+                    <Stack gap="xs" mb="md">
+                        <Progress
+                            value={(progress.done / taskParams.N) * 100}
+                            size="xl"
+                            radius="xl"
+                            striped
+                            animated
+                        />
+                        <Text size="sm" ta="center">
+                            Postęp: {progress.done} / {taskParams.N} ({((progress.done / taskParams.N) * 100).toFixed(1)}%)
+                        </Text>
+                        <Group justify="center" gap="xs">
+                            <Text size="sm" c="dimmed">
+                                Czas wykonywania: {startTime ? formatTime((Date.now() - startTime) / 1000) : '-'}
+                            </Text>
+                            {startTime && (
+                                <>
+                                    <Text size="sm" c="dimmed">|</Text>
+                                    <Text size="sm" c="dimmed">
+                                        Pozostało: {calculateEstimatedTimeRemaining() !== null
+                                            ? formatTime(calculateEstimatedTimeRemaining()!)
+                                            : '-'}
+                                    </Text>
+                                </>
+                            )}
+                        </Group>
+                    </Stack>
+                )}
                 <Text>
                     <strong>Wynik końcowy:</strong>{" "}
                     {result !== null ? result.toFixed(6) : "-"}

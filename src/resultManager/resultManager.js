@@ -21,6 +21,8 @@ io.of("/worker").on("connection", (socket) => {
         const { clientId, result, tasksCount } = data;
         const state = clientStates.get(clientId);
 
+        if (!state) return;
+
         if (state.completed === 0) {
             state.start = Date.now();
         }
@@ -28,15 +30,23 @@ io.of("/worker").on("connection", (socket) => {
         state.sum += result;
         state.completed += tasksCount;
 
-        if (state.completed === state.expected) {
-            const durationSeconds = ((Date.now() - state.start) / 1000).toFixed(2);
+        // Wysyłamy progress co sekundę
+        const now = Date.now();
+        if (now - state.lastUpdate >= 1000 || state.completed === state.expected) {
+            mainServer.emit("task_progress", {
+                clientId,
+                done: state.completed,
+                elapsedTime: Math.max(0, (now - state.start) / 1000)  // Ensure non-negative
+            });
+            state.lastUpdate = now;
+        }
 
+        if (state.completed === state.expected) {
             mainServer.emit("final_result", {
                 clientId,
                 sum: parseFloat(state.sum.toFixed(6)),
-                duration: durationSeconds
+                duration: ((now - state.start) / 1000).toFixed(2)
             });
-
             clientStates.delete(clientId);
         }
     });
@@ -50,7 +60,8 @@ io.of("/client").on("connection", (socket) => {
             expected,
             completed: 0,
             sum: 0,
-            start: 0
+            start: 0,
+            lastUpdate: 0
         });
     });
 });

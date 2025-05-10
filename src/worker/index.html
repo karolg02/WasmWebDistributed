@@ -21,7 +21,6 @@
         const t0 = performance.now();
         benchmark.ccall("benchmark");
         const t1 = performance.now();
-        //kwestia dyskusyjna czy tutaj wplywa na wydajnosc zaokraglenie wyniku /==/ do rozstrzygniecia
         score = (1 / (t1 - t0).toFixed(2)).toFixed(4) * 1000;
 
         socket.on("connect", () => {
@@ -32,9 +31,21 @@
             resultSocket.on("pong_resultSocket", () => {
                 latency = (performance.now() - pingStart).toFixed(2);
 
-                const browserInfo = `System: ${navigator.platform}, moc przeglądarki: ${score}, ping: ${latency}`;
+                const workerInfo = {
+                    system: {
+                        platform: navigator.platform,
+                        userAgent: navigator.userAgent,
+                        language: navigator.language,
+                        hardwareConcurrency: navigator.hardwareConcurrency,
+                        deviceMemory: navigator.deviceMemory || 'unknown'
+                    },
+                    performance: {
+                        benchmarkScore: parseFloat(score),
+                        latency: parseFloat(latency)
+                    }
+                };
 
-                socket.emit("register", { name: browserInfo, benchmarkScore: parseFloat(score) });
+                socket.emit("register", workerInfo);
             });
         });
     });
