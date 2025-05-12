@@ -1,6 +1,20 @@
-import React from "react";
-import { ClientPanel } from "./components/ClientPanel/ClientPanel";
+import '@mantine/core/styles.css';
+import 'primeicons/primeicons.css';
+import { createTheme, MantineProvider } from "@mantine/core";
+import { BrowserRouter } from "react-router-dom";
+import { Routing } from "./features/Routing";
+const theme = createTheme({})
 
-const App: React.FC = () => <ClientPanel />;
+function App() {
+    return (
+        <MantineProvider theme={theme}>
 
-export default App;
+            <BrowserRouter>
+                <Routing />
+            </BrowserRouter>
+
+        </MantineProvider>
+    )
+}
+
+export default App

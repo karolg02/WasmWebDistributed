@@ -7,11 +7,11 @@ const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-//polaczenie z glownym serwerem
 const mainServer = ioClient("http://localhost:8080/resultManager");
 
 const clientStates = new Map();
 
+// Połączenie z głównym serwerem
 io.of("/worker").on("connection", (socket) => {
     socket.on("ping_resultSocket", () => {
         socket.emit("pong_resultSocket");
@@ -36,7 +36,7 @@ io.of("/worker").on("connection", (socket) => {
             mainServer.emit("task_progress", {
                 clientId,
                 done: state.completed,
-                elapsedTime: Math.max(0, (now - state.start) / 1000)  // Ensure non-negative
+                elapsedTime: Math.max(0, (now - state.start) / 1000)
             });
             state.lastUpdate = now;
         }

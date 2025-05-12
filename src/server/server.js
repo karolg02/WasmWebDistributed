@@ -27,6 +27,7 @@ const waitingClients = new Map();
 let channel = null;
 let connection = null;
 
+//do informowania klientow o polaczonych workerach
 async function broadcastWorkerList() {
     const list = Array.from(workers.entries()).map(([id, worker]) => ({
         id,
@@ -46,7 +47,7 @@ async function broadcastWorkerList() {
     io.of("/client").emit("worker_update", list);
 }
 
-// Dodaj funkcję do obliczania i wysyłania stanu kolejek
+// do wyswietlania statusow
 async function broadcastQueueStatus() {
     const queueStatus = {};
 
@@ -190,7 +191,6 @@ async function start() {
             const allAvailable = selected.every(id => !workerLocks.has(id));
 
             if (allAvailable) {
-                // Worker jest dostępny - rozpocznij zadanie
                 for (const id of selected) {
                     workerLocks.set(id, clientId);
                 }

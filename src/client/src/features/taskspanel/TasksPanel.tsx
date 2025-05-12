@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { Container, Paper, Title, Divider, Text, Grid } from "@mantine/core";
-import { TaskForm } from "./components/TaskForm";
-import { WorkerCard } from "./components/WorkerCard";
-import { ResultsPanel } from "./components/ResultsPanel";
-import { useSocket } from "./hooks/useSocket";
-import { TaskParams } from "./types";
+import { TaskForm } from "../components/TaskForm";
+import { WorkerCard } from "../components/WorkerCard";
+import { ResultsPanel } from "../components/ResultsPanel";
+import { useSocket } from "../hooks/useSocket";
+import { TaskParams } from "../types";
 
 export const ClientPanel: React.FC = () => {
     const {

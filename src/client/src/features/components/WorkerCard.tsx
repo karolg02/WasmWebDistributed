@@ -1,7 +1,7 @@
 import React from "react";
 import { Card, Group, Stack, Text, Grid } from "@mantine/core";
 import { IconBrandChrome, IconBrandFirefox, IconBrandSafari, IconWorldWww } from "@tabler/icons-react";
-import { Worker } from "../../../types/Worker";
+import { Worker } from "../types/Worker";
 import { QueueStatus } from "../types";
 import { getWorkerStatus } from "../utils/workerStatus";
 
