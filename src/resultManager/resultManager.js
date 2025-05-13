@@ -18,13 +18,14 @@ io.of("/worker").on("connection", (socket) => {
     });
 
     socket.on("batch_result", (data) => {
-        const { clientId, result, tasksCount } = data;
+        const { clientId, result, tasksCount, method } = data;
         const state = clientStates.get(clientId);
 
         if (!state) return;
 
         if (state.completed === 0) {
             state.start = Date.now();
+            state.method = method; // Store method at start
         }
 
         state.sum += result;
@@ -42,9 +43,16 @@ io.of("/worker").on("connection", (socket) => {
         }
 
         if (state.completed === state.expected) {
+            // For Monte Carlo, we should average the results
+            let finalResult = state.sum;
+            if (state.method === 'montecarlo') {
+                // Divide by number of tasks for Monte Carlo
+                finalResult = state.sum / state.expected;
+            }
+            
             mainServer.emit("final_result", {
                 clientId,
-                sum: parseFloat(state.sum.toFixed(6)),
+                sum: parseFloat(finalResult.toFixed(6)),
                 duration: ((now - state.start) / 1000).toFixed(2)
             });
             clientStates.delete(clientId);
@@ -55,13 +63,14 @@ io.of("/worker").on("connection", (socket) => {
 io.of("/client").on("connection", (socket) => {
     console.log("[ResultManager] Succesfully connected to main server!");
 
-    socket.on("init_client", ({ clientId, expected }) => {
+    socket.on("init_client", ({ clientId, expected, method }) => {
         clientStates.set(clientId, {
             expected,
             completed: 0,
             sum: 0,
             start: 0,
-            lastUpdate: 0
+            lastUpdate: 0,
+            method: method // Add this line
         });
     });
 });

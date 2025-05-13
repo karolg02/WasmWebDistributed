@@ -97,7 +97,6 @@ export const Layout = () => {
                             color="cyan"
                         />
                     </Box>
-                    
                     <Divider my="sm" />
                     
                     <Text size="sm" fw={500} c="dimmed" mb="xs">OSTATNIE ZADANIA</Text>

@@ -49,6 +49,7 @@
             });
         });
     });
+    
     Module.onRuntimeInitialized = () => {
         socket.on("task_batch", (batch) => {
             const subBatchSize = Math.max(10, Math.min(
@@ -61,8 +62,38 @@
             let firstTaskId = batch[0].taskId;
             let clientId = batch[0].clientId;
 
+            // Store the method for the batch
+            const method = batch[0].method;
+
             for (const data of batch) {
-                const result = Module.ccall("add", "number", ["number", "number", "number"], [data.a, data.b, data.dx]);
+                let result;
+                
+                // Handle different integration methods
+                if (data.method === 'montecarlo') {
+                    // Force y_max to be 1.0 for sin(x)
+                    const y_max = Math.min(data.y_max || 1.0, 1.0);
+                    const seedOffset = data.seedOffset || 0;
+                    
+                    console.log(`Monte Carlo task: Range [${data.a}, ${data.b}], Samples: ${data.samples}, y_max: ${y_max}`);
+                    
+                    result = Module.ccall(
+                        "monte_carlo", 
+                        "number", 
+                        ["number", "number", "number", "number", "number"], 
+                        [data.a, data.b, data.samples, y_max, seedOffset]
+                    );
+                    
+                    console.log(`Monte Carlo result: ${result}`);
+                } else {
+                    // Original trapezoidal method
+                    result = Module.ccall(
+                        "add", 
+                        "number", 
+                        ["number", "number", "number"], 
+                        [data.a, data.b, data.dx]
+                    );
+                }
+                
                 batchSum += result;
                 taskCount++;
 
@@ -71,7 +102,8 @@
                         batchId: firstTaskId,
                         clientId: clientId,
                         result: batchSum,
-                        tasksCount: taskCount
+                        tasksCount: taskCount,
+                        method: method
                     });
 
                     batchSum = 0;

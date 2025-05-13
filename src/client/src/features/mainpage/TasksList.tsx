@@ -1,7 +1,7 @@
 import { Card, Group, Badge, Button, Image, Text, SimpleGrid, Title, Transition } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { IconArrowRight, IconCalculator, IconChartBar } from "@tabler/icons-react";
+import { useState } from "react";
+import { IconArrowRight } from "@tabler/icons-react";
 import { useSocket } from "../hooks/useSocket";
 
 interface Task {
@@ -11,6 +11,7 @@ interface Task {
     image?: string;
     badge?: string;
     dest: string;
+    method?: string;
 }
 
 export function TasksList() {
@@ -21,30 +22,29 @@ export function TasksList() {
     const tasks: Task[] = [
         { 
             id: 1, 
-            name: "Całkowanie sin(x)", 
-            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody prostokątów. Zadanie może być podzielone na wiele mniejszych zadań i rozdzielone między przeglądarki.", 
+            name: "Całkowanie sin(x) - Metoda trapezów", 
+            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody trapezów. Zadanie może być podzielone na wiele mniejszych zadań i rozdzielone między przeglądarki.", 
             image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
             badge: "Matematyka",
-            dest: "/client" 
+            dest: "/client",
+            method: "trapezoidal" 
         },
         { 
             id: 2, 
-            name: "Analiza danych", 
-            description: "Równoległe przetwarzanie zestawu danych. Funkcjonalność w przygotowaniu.", 
-            image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3",
-            badge: "Statystyka",
-            dest: "/brak" 
+            name: "Całkowanie sin(x) - Monte Carlo", 
+            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody Monte Carlo. Próbkowanie losowych punktów dla przybliżonego obliczenia całki.", 
+            image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
+            badge: "Matematyka",
+            dest: "/client",
+            method: "montecarlo" 
         },
     ];
     
-    const handleTaskSelect = (dest: string) => {
-        // Ensure worker list is refreshed when navigating
+    const handleTaskSelect = (dest: string, method?: string) => {
         if (socket) {
-            // Socket is already connected and will auto-request worker list
-            navigate(dest);
+            navigate(dest, { state: { method } });
         } else {
-            // Fallback in case socket isn't ready
-            navigate(dest);
+            navigate(dest, { state: { method } });
         }
     };
     
@@ -93,8 +93,9 @@ export function TasksList() {
                                 mt="md" 
                                 radius="md" 
                                 style={styles}
-                                onClick={() => handleTaskSelect(task.dest || "/client")}
+                                onClick={() => handleTaskSelect(task.dest || "/client", task.method)}
                                 rightSection={<IconArrowRight size={16} />}
+                                disabled={task.dest === "/brak"}
                             >
                                 Wybierz zadanie
                             </Button>

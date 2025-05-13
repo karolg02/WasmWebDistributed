@@ -1,12 +1,26 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Container, Paper, Title, Divider, Text, Checkbox, SimpleGrid, Group, Badge } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
 import { TaskParams } from "../types";
 import { TaskForm } from "../components/TaskForm";
+import { MonteCarloForm } from "../components/MonteCarloForm";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkerCard } from "../components/WorkerCard";
 
+// Add new type for Monte Carlo
+interface MonteCarloParams {
+    a: number;
+    b: number;
+    samples: number;
+    y_max: number;
+    N: number;
+}
+
 export const ClientPanel: React.FC = () => {
+    const location = useLocation();
+    const method = location.state?.method || "trapezoidal";
+
     const {
         socket,
         workers,
@@ -22,13 +36,23 @@ export const ClientPanel: React.FC = () => {
         startTask
     } = useSocket();
 
+    // State for trapezoidal method
     const [taskParams, setTaskParams] = useState<TaskParams>({
         a: 0,
         b: 3.14,
         dx: 0.00001,
         N: 100000,
     });
-    
+
+    // State for Monte Carlo method
+    const [monteCarloParams, setMonteCarloParams] = useState<MonteCarloParams>({
+        a: 0,
+        b: Math.PI,
+        samples: 10000,
+        y_max: 1,
+        N: 100
+    });
+
     // Force refresh of worker list on component mount
     useEffect(() => {
         if (socket) {
@@ -43,7 +67,18 @@ export const ClientPanel: React.FC = () => {
             alert("Wybierz co najmniej jednego workera!");
             return;
         }
-        startTask(taskParams, selectedWorkerIds);
+
+        if (method === "trapezoidal") {
+            startTask(taskParams, selectedWorkerIds);
+        } else {
+            socket.emit("start", {
+                workerIds: selectedWorkerIds,
+                taskParams: {
+                    ...monteCarloParams,
+                    method: "montecarlo"
+                }
+            });
+        }
     };
 
     return (
@@ -52,12 +87,21 @@ export const ClientPanel: React.FC = () => {
                 <Title order={2} mb="md" c="cyan">Panel Klienta</Title>
                 <Divider my="md" />
 
-                <TaskForm
-                    taskParams={taskParams}
-                    setTaskParams={setTaskParams}
-                    onSubmit={handleSubmit}
-                    disabled={isCalculating}
-                />
+                {method === "trapezoidal" ? (
+                    <TaskForm
+                        taskParams={taskParams}
+                        setTaskParams={setTaskParams}
+                        onSubmit={handleSubmit}
+                        disabled={isCalculating}
+                    />
+                ) : (
+                    <MonteCarloForm
+                        taskParams={monteCarloParams}
+                        setTaskParams={setMonteCarloParams}
+                        onSubmit={handleSubmit}
+                        disabled={isCalculating}
+                    />
+                )}
 
                 <Divider my="xl" />
 
