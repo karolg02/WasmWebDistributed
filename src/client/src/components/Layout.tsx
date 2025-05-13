@@ -1,6 +1,6 @@
-import { AppShell, Avatar, Burger, Button, Group, Popover, Text } from "@mantine/core";
+import { AppShell, Avatar, Burger, Button, Center, Group, Loader, Popover, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconHome, IconPencilPlus, IconWallpaper, IconShoppingBag, IconDoorExit } from "@tabler/icons-react";
+import { IconHome, IconDoorExit } from "@tabler/icons-react";
 import { useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 
@@ -27,7 +27,7 @@ export const Layout = () => {
                 <Group h="100%" px="md">
                     <Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" />
                     <Burger opened={desktopOpened} onClick={toggleDesktop} visibleFrom="sm" size="sm" />
-                    <Text>Web Distributed Computing System</Text>
+                    <Text><b>Web Distributed Computing System</b></Text>
                     <Group justify="end" style={{ flex: "1" }}>
                         <Group ml="xs" gap={4} style={{ alignItems: "end" }}>
                             <Popover radius="xl" position="bottom" withArrow shadow="md" opened={show1}>
@@ -36,7 +36,7 @@ export const Layout = () => {
                                         onMouseEnter={() => setShow1(true)}
                                         onMouseLeave={() => setShow1(false)}
                                         className="buttonCover" variant="transparent" onClick={() => navigate('/')}>
-                                        <IconHome />
+                                        <IconHome color="black" />
                                     </Button>
                                 </Popover.Target>
                                 <Popover.Dropdown style={{ pointerEvents: 'none' }}>
@@ -44,17 +44,17 @@ export const Layout = () => {
                                 </Popover.Dropdown>
                             </Popover>
 
-                            <Popover radius="xl" position="bottom" withArrow shadow="md" opened={show2}>
+                            <Popover radius="lg" position="bottom" shadow="md" withArrow opened={show2}>
                                 <Popover.Target>
                                     <Button
                                         onMouseEnter={() => setShow2(true)}
                                         onMouseLeave={() => setShow2(false)}
-                                        className="buttonCover" variant="transparent" onClick={() => navigate('/offers/new')}>
-                                        <IconPencilPlus />
+                                        className="buttonCover" variant="transparent" onClick={() => navigate('/clientacc')}>
+                                        <Avatar variant="transparent" color="black" radius="xl" style={{ marginLeft: 2 }} />
                                     </Button>
                                 </Popover.Target>
-                                <Popover.Dropdown style={{ pointerEvents: 'none' }}>
-                                    <Text size="sm">Dodaj oferte</Text>
+                                <Popover.Dropdown>
+                                    <Text size="sm">Profil</Text>
                                 </Popover.Dropdown>
                             </Popover>
 
@@ -63,43 +63,12 @@ export const Layout = () => {
                                     <Button
                                         onMouseEnter={() => setShow3(true)}
                                         onMouseLeave={() => setShow3(false)}
-                                        className="buttonCover" variant="transparent" onClick={() => navigate('/myoffers')}>
-                                        <IconWallpaper />
+                                        className="buttonCover" variant="transparent" >
+                                        <IconDoorExit style={{ marginLeft: 4, color: "black" }} />
                                     </Button>
                                 </Popover.Target>
-                                <Popover.Dropdown style={{ pointerEvents: 'none' }}>
-                                    <Text size="sm">Moje oferty</Text>
-                                </Popover.Dropdown>
-                            </Popover>
-
-                            <Popover radius="xl" position="bottom" withArrow shadow="md" opened={show4}>
-                                <Popover.Target>
-                                    <Button
-                                        onMouseEnter={() => setShow4(true)}
-                                        onMouseLeave={() => setShow4(false)}
-                                        className="buttonCover" variant="transparent" onClick={() => navigate('/mycart')}>
-                                        <IconShoppingBag />
-                                    </Button>
-                                </Popover.Target>
-                                <Popover.Dropdown style={{ pointerEvents: 'none' }}>
-                                    <Text size="sm">Koszyk</Text>
-                                </Popover.Dropdown>
-                            </Popover>
-
-
-                            <Popover radius="lg" position="bottom" shadow="md" withArrow>
-                                <Popover.Target>
-                                    <Button className="buttonCover" variant="transparent">
-                                        <Avatar variant="transparent" color="black" radius="xl" style={{ marginLeft: 2 }} />
-                                    </Button>
-                                </Popover.Target>
-                                <Popover.Dropdown bg="dark">
-                                    <Button className="buttonCover" variant="transparent" >
-                                        Mój profil <i className="pi pi-user" style={{ fontSize: '2.5rem' }}></i>
-                                    </Button>
-                                    <Button className="buttonCover" variant="transparent" >
-                                        Wyloguj <IconDoorExit style={{ marginLeft: 4, color: "orange" }} />
-                                    </Button>
+                                <Popover.Dropdown>
+                                    <Text size="sm">Wyloguj</Text>
                                 </Popover.Dropdown>
                             </Popover>
                         </Group>
@@ -107,8 +76,8 @@ export const Layout = () => {
                 </Group>
             </AppShell.Header>
             <AppShell.Navbar p="md">
-                <Text fw={500} mb="md">Panel nawigacyjny</Text>
-
+                <Center><Loader size="md" type="dots" /></Center>
+                <Text fw={500} mb="md">Wstepnie tu beda najnowsze zadania zrobione poprzez przegladarki</Text>
             </AppShell.Navbar>
             <AppShell.Main>
                 <Outlet />

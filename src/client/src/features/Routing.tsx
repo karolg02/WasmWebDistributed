@@ -1,6 +1,8 @@
 import { RouteObject, useRoutes } from "react-router-dom";
 import { ClientPanel } from "./taskspanel/TasksPanel";
 import { Layout } from "../components/Layout";
+import { MainPage } from "./mainpage/MainPage";
+import { ClientAcc } from "./clientacc/ClientAcc";
 
 const routes: RouteObject[] = [
     {
@@ -9,11 +11,16 @@ const routes: RouteObject[] = [
         children: [
             {
                 path: "/",
-                element: <div>Home</div>
+                element: <MainPage />
             },
             {
                 path: "/client",
                 element: <ClientPanel />
+            },
+            {
+
+                path: "/clientacc",
+                element: <ClientAcc />
             }
         ]
     }
