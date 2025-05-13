@@ -66,11 +66,11 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                 />
                 <Transition mounted={!disabled} transition="slide-up" duration={400}>
                     {(styles) => (
-                        <Button 
-                            type="submit" 
-                            fullWidth 
-                            mt="sm" 
-                            size="md" 
+                        <Button
+                            type="submit"
+                            fullWidth
+                            mt="sm"
+                            size="md"
                             disabled={disabled}
                             style={styles}
                             leftSection={<IconPlayerPlay size={16} />}
@@ -83,11 +83,11 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                 </Transition>
                 <Transition mounted={!!disabled} transition="slide-up" duration={400}>
                     {(styles) => (
-                        <Button 
-                            type="button" 
-                            fullWidth 
-                            mt="sm" 
-                            size="md" 
+                        <Button
+                            type="button"
+                            fullWidth
+                            mt="sm"
+                            size="md"
                             style={styles}
                             loading
                             radius="md"

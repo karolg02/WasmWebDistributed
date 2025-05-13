@@ -25,7 +25,13 @@ io.of("/worker").on("connection", (socket) => {
 
         if (state.completed === 0) {
             state.start = Date.now();
-            state.method = method; // Store method at start
+            state.method = method;
+
+            if (method === 'montecarlo') {
+                state.a = data.a;
+                state.b = data.b;
+                state.y_max = data.y_max;
+            }
         }
 
         state.sum += result;
@@ -43,13 +49,12 @@ io.of("/worker").on("connection", (socket) => {
         }
 
         if (state.completed === state.expected) {
-            // For Monte Carlo, we should average the results
             let finalResult = state.sum;
             if (state.method === 'montecarlo') {
-                // Divide by number of tasks for Monte Carlo
-                finalResult = state.sum / state.expected;
+                const area = (state.b - state.a) * state.y_max;
+                finalResult = (state.sum / state.totalSamples) * area;
             }
-            
+
             mainServer.emit("final_result", {
                 clientId,
                 sum: parseFloat(finalResult.toFixed(6)),
@@ -63,14 +68,15 @@ io.of("/worker").on("connection", (socket) => {
 io.of("/client").on("connection", (socket) => {
     console.log("[ResultManager] Succesfully connected to main server!");
 
-    socket.on("init_client", ({ clientId, expected, method }) => {
+    socket.on("init_client", ({ clientId, expected, method, totalSamples }) => {
         clientStates.set(clientId, {
             expected,
             completed: 0,
             sum: 0,
             start: 0,
             lastUpdate: 0,
-            method: method // Add this line
+            method: method,
+            totalSamples: totalSamples
         });
     });
 });

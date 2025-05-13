@@ -7,7 +7,7 @@ interface MonteCarloParams {
     b: number;
     samples: number;
     y_max: number;
-    N: number;  // Number of tasks for distribution
+    N: number;
 }
 
 interface MonteCarloFormProps {
@@ -67,9 +67,9 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                     label="Maksymalna wartość Y"
                     name="y_max"
                     value={taskParams.y_max}
-                    onChange={(val) => setTaskParams(p => ({ 
-                        ...p, 
-                        y_max: typeof val === "number" ? Math.min(val, 1.0) : 1.0 
+                    onChange={(val) => setTaskParams(p => ({
+                        ...p,
+                        y_max: typeof val === "number" ? Math.min(val, 1.0) : 1.0
                     }))}
                     defaultValue={1.0}
                     max={1.0}
@@ -89,11 +89,11 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                 />
                 <Transition mounted={!disabled} transition="slide-up" duration={400}>
                     {(styles) => (
-                        <Button 
-                            type="submit" 
-                            fullWidth 
-                            mt="sm" 
-                            size="md" 
+                        <Button
+                            type="submit"
+                            fullWidth
+                            mt="sm"
+                            size="md"
                             disabled={disabled}
                             style={styles}
                             leftSection={<IconPlayerPlay size={16} />}
@@ -106,11 +106,11 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                 </Transition>
                 <Transition mounted={!!disabled} transition="slide-up" duration={400}>
                     {(styles) => (
-                        <Button 
-                            type="button" 
-                            fullWidth 
-                            mt="sm" 
-                            size="md" 
+                        <Button
+                            type="button"
+                            fullWidth
+                            mt="sm"
+                            size="md"
                             style={styles}
                             loading
                             radius="md"

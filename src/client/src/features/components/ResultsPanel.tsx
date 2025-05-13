@@ -7,11 +7,12 @@ import { formatTime } from "../utils/formatTime";
 interface ResultsPanelProps {
     isCalculating: boolean;
     progress: ProgressType;
-    taskParams: TaskParams;
+    taskParams: TaskParams | any;  // Using any since we need to support both task types
     startTime: number | null;
     result: number | null;
     duration: number | null;
     tasksPerSecond: number | null;
+    method?: 'trapezoidal' | 'montecarlo';  // Add method prop
 }
 
 export const ResultsPanel: React.FC<ResultsPanelProps> = ({
@@ -21,13 +22,17 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     startTime,
     result,
     duration,
-    tasksPerSecond
+    tasksPerSecond,
+    method = 'trapezoidal'  // Default to trapezoidal
 }) => {
     const [showResult, setShowResult] = useState(false);
-    const progressPercentage = (progress.done / taskParams.N) * 100;
-    
+
+    // Calculate progress percentage based on method
+    const progressPercentage = method === 'montecarlo'
+        ? (progress.done / taskParams.N) * 100  // Same calculation but different meaning
+        : (progress.done / taskParams.N) * 100;
+
     useEffect(() => {
-        // Trigger animation when result is available
         if (result !== null) {
             setShowResult(false);
             setTimeout(() => setShowResult(true), 100);
@@ -35,10 +40,15 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     }, [result]);
 
     const calculateEstimatedTimeRemaining = () => {
-        if (!startTime || !isCalculating || progress.done === 0 || !tasksPerSecond) return null;
+        if (!startTime || !isCalculating) return null;
+        const elapsedTime = (Date.now() - startTime) / 1000;
+        if (elapsedTime < 1) return null;
+
+        const currentTasksPerSecond = progress.done / elapsedTime;
         const remainingTasks = taskParams.N - progress.done;
-        if (remainingTasks <= 0) return null;
-        return remainingTasks / tasksPerSecond;
+        const effectiveRate = tasksPerSecond && tasksPerSecond > 0 ? tasksPerSecond : currentTasksPerSecond;
+
+        return remainingTasks / effectiveRate;
     };
 
     // Format duration safely
@@ -50,19 +60,30 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         return `${value} sekund`;
     };
 
+    // Determine progress text based on method
+    const getProgressText = () => {
+        if (method === 'montecarlo') {
+            const doneSamples = progress.done * taskParams.samples;
+            const totalSamples = taskParams.N * taskParams.samples;
+            return `Postęp: ${doneSamples.toLocaleString()} / ${totalSamples.toLocaleString()} próbek`;
+        } else {
+            return `Postęp: ${progress.done} / ${taskParams.N} zadań`;
+        }
+    };
+
     return (
         <>
-            <Transition 
-                mounted={isCalculating} 
-                transition="slide-down" 
-                duration={400} 
+            <Transition
+                mounted={isCalculating}
+                transition="slide-down"
+                duration={400}
                 timingFunction="ease"
             >
                 {(styles) => (
-                    <Paper 
-                        withBorder 
-                        radius="md" 
-                        p="md" 
+                    <Paper
+                        withBorder
+                        radius="md"
+                        p="md"
                         style={{ ...styles, overflow: 'hidden' }}
                         bg="dark.7"
                         mb="lg"
@@ -74,16 +95,16 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                     {progressPercentage.toFixed(1)}%
                                 </Text>
                             </Group>
-                            
-                            <Progress 
-                                value={progressPercentage} 
-                                size="xl" 
-                                radius="xl" 
-                                striped 
+
+                            <Progress
+                                value={progressPercentage}
+                                size="xl"
+                                radius="xl"
+                                striped
                                 animated
                                 color="cyan"
                             />
-                            
+
                             <Grid gutter="md">
                                 <Grid.Col span={6}>
                                     <Group>
@@ -93,7 +114,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                         </Text>
                                     </Group>
                                 </Grid.Col>
-                                
+
                                 <Grid.Col span={6}>
                                     <Group>
                                         <IconHourglass size={18} color="#5C5F66" />
@@ -104,10 +125,10 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                         </Text>
                                     </Group>
                                 </Grid.Col>
-                                
+
                                 <Grid.Col span={12}>
                                     <Text ta="center" size="sm">
-                                        Postęp: {progress.done} / {taskParams.N} zadań
+                                        {getProgressText()}
                                     </Text>
                                 </Grid.Col>
                             </Grid>
@@ -124,10 +145,10 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                 exitDuration={200}
             >
                 {(styles) => (
-                    <Card 
-                        withBorder 
-                        radius="md" 
-                        p="lg" 
+                    <Card
+                        withBorder
+                        radius="md"
+                        p="lg"
                         style={{ ...styles }}
                         bg="dark.7"
                     >
@@ -144,7 +165,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                     </Text>
                                 </Group>
                             </Stack>
-                            
+
                             <RingProgress
                                 sections={[{ value: 100, color: 'cyan' }]}
                                 size={80}
@@ -160,12 +181,12 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                     </Card>
                 )}
             </Transition>
-            
+
             {!isCalculating && result === null && (
-                <Paper 
-                    withBorder 
-                    radius="md" 
-                    p="md" 
+                <Paper
+                    withBorder
+                    radius="md"
+                    p="md"
                     bg="dark.7"
                 >
                     <Text c="dimmed" ta="center">Wybierz parametry i kliknij "Start" aby rozpocząć obliczenia</Text>

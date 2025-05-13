@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { Container, Paper, Title, Divider, Text, Checkbox, SimpleGrid, Group, Badge } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
 import { TaskParams } from "../types";
-import { TaskForm } from "../components/TaskForm";
+import { TaskForm } from "../components/TrapezMethod";
 import { MonteCarloForm } from "../components/MonteCarloForm";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkerCard } from "../components/WorkerCard";
@@ -53,10 +53,8 @@ export const ClientPanel: React.FC = () => {
         N: 100
     });
 
-    // Force refresh of worker list on component mount
     useEffect(() => {
         if (socket) {
-            // The socket will automatically receive worker updates on connection
             socket.emit("request_worker_list");
         }
     }, [socket]);
@@ -150,11 +148,12 @@ export const ClientPanel: React.FC = () => {
                 <ResultsPanel
                     isCalculating={isCalculating}
                     progress={progress}
-                    taskParams={taskParams}
+                    taskParams={method === "trapezoidal" ? taskParams : monteCarloParams}
                     startTime={startTime}
                     result={result}
                     duration={duration}
                     tasksPerSecond={tasksPerSecond}
+                    method={method}
                 />
             </Paper>
         </Container>

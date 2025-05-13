@@ -125,7 +125,10 @@ async function tryToGiveTasksForWaitingClients() {
         //zglaszam klienta do resultManagera
         resultManagerSocket.emit("init_client", {
             clientId,
-            expected: pending.tasks.length
+            expected: pending.tasks.length,
+            method: pending.tasks[0]?.method,
+            totalSamples: pending.tasks[0]?.method === 'montecarlo' ?
+                pending.taskParams?.samples : null // Don't multiply by N
         });
 
         console.log(`Time for ${clientId} tasks`);
@@ -200,16 +203,28 @@ async function start() {
                     workerIds: selected
                 });
 
+                let totalSamples = null;
+                if (taskParams.method === 'montecarlo') {
+                    totalSamples = taskParams.samples;
+                }
+
                 resultManagerSocket.emit("init_client", {
                     clientId,
-                    expected: tasks.length
+                    expected: tasks.length,
+                    method: taskParams.method,
+                    totalSamples: totalSamples
                 });
 
                 await tasksDevider3000(tasks, clientId, selected);
                 broadcastQueueStatus();
             } else {
-                // Worker zajęty - dodaj do kolejki
-                waitingClients.set(clientId, { socket, workerIds: selected, tasks });
+                // worker zajety, dodaje do kolejki
+                waitingClients.set(clientId, {
+                    socket,
+                    workerIds: selected,
+                    tasks,
+                    taskParams
+                });
 
                 for (const id of selected) {
                     if (!workerQueue.has(id)) {
