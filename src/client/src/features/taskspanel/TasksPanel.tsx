@@ -1,10 +1,10 @@
-import React, { useState } from "react";
-import { Container, Paper, Title, Divider, Text, Grid } from "@mantine/core";
-import { TaskForm } from "../components/TaskForm";
-import { WorkerCard } from "../components/WorkerCard";
-import { ResultsPanel } from "../components/ResultsPanel";
+import React, { useState, useEffect } from "react";
+import { Container, Paper, Title, Divider, Text, Checkbox, SimpleGrid, Group, Badge } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
 import { TaskParams } from "../types";
+import { TaskForm } from "../components/TaskForm";
+import { ResultsPanel } from "../components/ResultsPanel";
+import { WorkerCard } from "../components/WorkerCard";
 
 export const ClientPanel: React.FC = () => {
     const {
@@ -28,6 +28,14 @@ export const ClientPanel: React.FC = () => {
         dx: 0.00001,
         N: 100000,
     });
+    
+    // Force refresh of worker list on component mount
+    useEffect(() => {
+        if (socket) {
+            // The socket will automatically receive worker updates on connection
+            socket.emit("request_worker_list");
+        }
+    }, [socket]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -40,8 +48,8 @@ export const ClientPanel: React.FC = () => {
 
     return (
         <Container size="md" py="xl">
-            <Paper withBorder shadow="md" radius="md" p="xl">
-                <Title order={2} mb="md">Panel Klienta</Title>
+            <Paper withBorder shadow="md" radius="md" p="xl" bg="dark.8">
+                <Title order={2} mb="md" c="cyan">Panel Klienta</Title>
                 <Divider my="md" />
 
                 <TaskForm
@@ -53,34 +61,48 @@ export const ClientPanel: React.FC = () => {
 
                 <Divider my="xl" />
 
-                <Title order={3} mb="sm">Aktywni workerzy</Title>
+                <Title order={3} mb="sm" c="white">
+                    <Group gap="xs">
+                        <Text span>Aktywni workerzy</Text>
+                        <Badge color="cyan" radius="sm">{workers.length}</Badge>
+                    </Group>
+                </Title>
 
                 {workers.length === 0 ? (
-                    <Text color="dimmed">Brak dostępnych workerów.</Text>
+                    <Paper withBorder p="md" radius="md" bg="dark.7">
+                        <Text c="dimmed" ta="center">Brak dostępnych workerów. Otwórz stronę workera w nowej przeglądarce.</Text>
+                    </Paper>
                 ) : (
-                    <Grid gutter="md">
-                        {workers.map(worker => (
-                            <WorkerCard
-                                key={worker.id}
-                                worker={worker}
-                                selected={selectedWorkerIds.includes(worker.id)}
-                                isCurrentClient={queueStatus[worker.id]?.currentClient === socket.id}
-                                queueStatus={queueStatus[worker.id]}
-                                onSelect={() => {
-                                    setSelectedWorkerIds(prev =>
-                                        prev.includes(worker.id)
-                                            ? prev.filter(id => id !== worker.id)
-                                            : [...prev, worker.id]
-                                    );
-                                }}
-                            />
-                        ))}
-                    </Grid>
+                    <SimpleGrid cols={{ base: 1, sm: 1, md: 2 }} spacing="sm">
+                        {workers.map(worker => {
+                            const isSelected = selectedWorkerIds.includes(worker.id);
+                            const workerQueueStatus = queueStatus ? queueStatus[worker.id] : null;
+                            const isCurrentClient = workerQueueStatus?.currentClient === socket?.id;
+
+                            return (
+                                <WorkerCard
+                                    key={worker.id}
+                                    worker={worker}
+                                    selected={isSelected}
+                                    isCurrentClient={isCurrentClient}
+                                    queueStatus={workerQueueStatus}
+                                    onSelect={() => {
+                                        if (isCalculating) return;
+                                        if (isSelected) {
+                                            setSelectedWorkerIds(prev => prev.filter(id => id !== worker.id));
+                                        } else {
+                                            setSelectedWorkerIds(prev => [...prev, worker.id]);
+                                        }
+                                    }}
+                                />
+                            );
+                        })}
+                    </SimpleGrid>
                 )}
 
                 <Divider my="xl" />
 
-                <Title order={3} mb="xs">Wyniki</Title>
+                <Title order={3} mb="xs" c="white">Wyniki</Title>
                 <ResultsPanel
                     isCalculating={isCalculating}
                     progress={progress}

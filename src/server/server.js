@@ -224,6 +224,10 @@ async function start() {
             }
         });
 
+        socket.on("request_worker_list", () => {
+            broadcastWorkerList();
+        });
+
         socket.on("disconnect", () => {
             console.log("[Client] Disconnected", socket.id);
             clientSockets.delete(socket.id);

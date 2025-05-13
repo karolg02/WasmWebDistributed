@@ -1,5 +1,5 @@
 import React from "react";
-import { Card, Group, Stack, Text, Grid } from "@mantine/core";
+import { Card, Group, Stack, Text, Badge } from "@mantine/core";
 import { IconBrandChrome, IconBrandFirefox, IconBrandSafari, IconWorldWww } from "@tabler/icons-react";
 import { Worker } from "../types/Worker";
 import { QueueStatus } from "../types";
@@ -9,7 +9,7 @@ interface WorkerCardProps {
     worker: Worker;
     selected: boolean;
     isCurrentClient: boolean;
-    queueStatus: QueueStatus[string];
+    queueStatus?: QueueStatus[string] | null;
     onSelect: () => void;
 }
 
@@ -27,55 +27,62 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
         return <IconWorldWww size={20} />;
     };
 
-    const status = getWorkerStatus(queueStatus, isCurrentClient);
+    const status = getWorkerStatus(queueStatus || { queueLength: 0, currentClient: null, isAvailable: false }, isCurrentClient);
 
     return (
-        <Grid.Col span={{ base: 12, sm: 12, md: 6 }}>
-            <Card
-                shadow="sm"
-                padding="md"
-                radius="md"
-                withBorder
-                style={{
-                    cursor: "pointer",
-                    backgroundColor: selected ? "#dcbfa1" : undefined,
-                    opacity: queueStatus?.currentClient && !isCurrentClient ? 0.8 : 1,
-                    transition: "all 0.2s ease",
-                }}
-                onClick={onSelect}
-            >
-                <Group justify="space-between" align="flex-start">
-                    <Group gap="xs">
-                        {getBrowserIcon(worker.specs.userAgent)}
-                        <Stack gap={2}>
-                            <Text size="sm" fw={500}>
-                                {worker.name || worker.id}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                                {worker.specs.platform}
-                            </Text>
-                            <Group gap={5}>
-                                <Text size="xs" c={status.color}>
-                                    {status.message}
+        <Card
+            shadow="sm"
+            padding="md"
+            radius="md"
+            withBorder
+            bg={selected ? "dark.6" : "dark.7"}
+            style={{
+                cursor: "pointer",
+                opacity: queueStatus?.currentClient && !isCurrentClient ? 0.7 : 1,
+                transition: "all 0.2s ease",
+                borderColor: selected ? "#45aaf2" : undefined,
+                borderWidth: selected ? "2px" : "1px",
+                marginBottom: "10px"
+            }}
+            onClick={onSelect}
+        >
+            <Group justify="space-between" align="flex-start">
+                <Group gap="xs">
+                    {getBrowserIcon(worker.specs.userAgent)}
+                    <Stack gap={2}>
+                        <Text size="sm" fw={500} c={selected ? "cyan" : "white"}>
+                            {worker.name || worker.id}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                            {worker.specs.platform}
+                        </Text>
+                        <Group gap={5}>
+                            <Badge 
+                                color={status.color === "green" ? "teal" : 
+                                      status.color === "red" ? "red" : 
+                                      status.color === "orange" ? "orange" : "gray"}
+                                variant="light"
+                                size="xs"
+                            >
+                                {status.message}
+                            </Badge>
+                            {status.badge && (
+                                <Text size="xs" c="dimmed">
+                                    ({status.badge})
                                 </Text>
-                                {status.badge && (
-                                    <Text size="xs" c="dimmed">
-                                        ({status.badge})
-                                    </Text>
-                                )}
-                            </Group>
-                        </Stack>
-                    </Group>
-                    <Stack gap={2} align="flex-end">
-                        <Text size="xs">
-                            CPU: {worker.specs.hardwareConcurrency} cores
-                        </Text>
-                        <Text size="xs">
-                            Score: {worker.performance.benchmarkScore.toFixed(2)}
-                        </Text>
+                            )}
+                        </Group>
                     </Stack>
                 </Group>
-            </Card>
-        </Grid.Col>
+                <Stack gap={2} align="flex-end">
+                    <Text size="xs" c="dimmed">
+                        CPU: {worker.specs.hardwareConcurrency} cores
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                        Score: <Text span c="cyan" fw={500}>{worker.performance.benchmarkScore.toFixed(2)}</Text>
+                    </Text>
+                </Stack>
+            </Group>
+        </Card>
     );
 };
