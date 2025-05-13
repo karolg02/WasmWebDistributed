@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Container, Paper, Title, Divider, Text, Checkbox, SimpleGrid, Group, Badge } from "@mantine/core";
+import { Container, Paper, Title, Divider, Text, SimpleGrid, Group, Badge } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
 import { TaskParams } from "../types";
 import { TaskForm } from "../components/TrapezMethod";
@@ -82,9 +82,6 @@ export const ClientPanel: React.FC = () => {
     return (
         <Container size="md" py="xl">
             <Paper withBorder shadow="md" radius="md" p="xl" bg="dark.8">
-                <Title order={2} mb="md" c="cyan">Panel Klienta</Title>
-                <Divider my="md" />
-
                 {method === "trapezoidal" ? (
                     <TaskForm
                         taskParams={taskParams}

@@ -20,7 +20,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         <Title order={4} mb="md">
             <Group gap="xs">
                 <IconCalculator size={20} />
-                <span>Parametry zadania</span>
+                <span>Całkowanie metodą trapezów</span>
             </Group>
         </Title>
         <form onSubmit={onSubmit}>

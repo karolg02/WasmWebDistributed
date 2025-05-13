@@ -27,7 +27,7 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
         <Title order={4} mb="md">
             <Group gap="xs">
                 <IconCalculator size={20} />
-                <span>Parametry zadania - Monte Carlo</span>
+                <span>Całkowanie Metodą Monte Carlo</span>
             </Group>
         </Title>
         <form onSubmit={onSubmit}>

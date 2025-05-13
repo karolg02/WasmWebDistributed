@@ -7,7 +7,7 @@ import { formatTime } from "../utils/formatTime";
 interface ResultsPanelProps {
     isCalculating: boolean;
     progress: ProgressType;
-    taskParams: TaskParams | any;  // Using any since we need to support both task types
+    taskParams: TaskParams | any;
     startTime: number | null;
     result: number | null;
     duration: number | null;
@@ -26,11 +26,19 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     method = 'trapezoidal'  // Default to trapezoidal
 }) => {
     const [showResult, setShowResult] = useState(false);
+    const [localStartTime, setLocalStartTime] = useState<number | null>(null);
+
+    // Set local start time when calculation begins
+    useEffect(() => {
+        if (isCalculating && !localStartTime) {
+            setLocalStartTime(Date.now());
+        } else if (!isCalculating) {
+            setLocalStartTime(null);
+        }
+    }, [isCalculating]);
 
     // Calculate progress percentage based on method
-    const progressPercentage = method === 'montecarlo'
-        ? (progress.done / taskParams.N) * 100  // Same calculation but different meaning
-        : (progress.done / taskParams.N) * 100;
+    const progressPercentage = (progress.done / taskParams.N) * 100;
 
     useEffect(() => {
         if (result !== null) {
@@ -39,16 +47,41 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         }
     }, [result]);
 
+    // Use either the prop startTime or our local one, whichever is available
+    const effectiveStartTime = startTime || localStartTime;
+
+    // Get current elapsed time
+    const getCurrentElapsedTime = () => {
+        if (!effectiveStartTime) return null;
+        return (Date.now() - effectiveStartTime) / 1000;
+    };
+
     const calculateEstimatedTimeRemaining = () => {
-        if (!startTime || !isCalculating) return null;
-        const elapsedTime = (Date.now() - startTime) / 1000;
-        if (elapsedTime < 1) return null;
+        const elapsedTime = getCurrentElapsedTime();
+        if (!isCalculating || !elapsedTime || elapsedTime < 1) return null;
 
-        const currentTasksPerSecond = progress.done / elapsedTime;
-        const remainingTasks = taskParams.N - progress.done;
-        const effectiveRate = tasksPerSecond && tasksPerSecond > 0 ? tasksPerSecond : currentTasksPerSecond;
+        try {
+            if (method === 'montecarlo') {
+                // For Monte Carlo, base calculation on tasks completed
+                const percentComplete = progress.done / taskParams.N;
+                if (percentComplete <= 0 || percentComplete > 0.99) return null;
 
-        return remainingTasks / effectiveRate;
+                const estimatedTotalTime = elapsedTime / percentComplete;
+                return Math.max(0, estimatedTotalTime - elapsedTime);
+            } else {
+                // For trapezoidal, we measure in tasks
+                const currentTasksPerSecond = progress.done / elapsedTime;
+                if (currentTasksPerSecond <= 0) return null;
+
+                const remainingTasks = taskParams.N - progress.done;
+                const effectiveRate = tasksPerSecond && tasksPerSecond > 0 ? tasksPerSecond : currentTasksPerSecond;
+
+                return remainingTasks / effectiveRate;
+            }
+        } catch (error) {
+            console.error("Error calculating time remaining:", error);
+            return null;
+        }
     };
 
     // Format duration safely
@@ -69,6 +102,18 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         } else {
             return `Postęp: ${progress.done} / ${taskParams.N} zadań`;
         }
+    };
+
+    // Get formatted elapsed time text
+    const getElapsedTimeText = () => {
+        const elapsed = getCurrentElapsedTime();
+        return elapsed ? formatTime(elapsed) : '-';
+    };
+
+    // Get remaining time text
+    const getRemainingTimeText = () => {
+        const remaining = calculateEstimatedTimeRemaining();
+        return remaining !== null ? formatTime(remaining) : '-';
     };
 
     return (
@@ -110,7 +155,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                     <Group>
                                         <IconClockHour4 size={18} color="#5C5F66" />
                                         <Text size="sm" c="dimmed">
-                                            Czas wykonywania: {startTime ? formatTime((Date.now() - startTime) / 1000) : '-'}
+                                            Czas wykonywania: {getElapsedTimeText()}
                                         </Text>
                                     </Group>
                                 </Grid.Col>
@@ -119,9 +164,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                     <Group>
                                         <IconHourglass size={18} color="#5C5F66" />
                                         <Text size="sm" c="dimmed">
-                                            Pozostało: {calculateEstimatedTimeRemaining() !== null
-                                                ? formatTime(calculateEstimatedTimeRemaining()!)
-                                                : '-'}
+                                            Pozostało: {getRemainingTimeText()}
                                         </Text>
                                     </Group>
                                 </Grid.Col>
