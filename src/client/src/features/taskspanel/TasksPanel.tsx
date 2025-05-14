@@ -102,7 +102,7 @@ export const ClientPanel: React.FC = () => {
 
                 <Title order={3} mb="sm" c="white">
                     <Group gap="xs">
-                        <Text span>Aktywni workerzy</Text>
+                        <Text span>Aktywne przeglądarki</Text>
                         <Badge color="cyan" radius="sm">{workers.length}</Badge>
                     </Group>
                 </Title>

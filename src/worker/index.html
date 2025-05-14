@@ -63,7 +63,8 @@
             let clientId = batch[0].clientId;
             const method = batch[0].method;
 
-            for (const data of batch) {
+            for (let i = 0; i < batch.length; i++) {
+                const data = batch[i];
                 let result;
 
                 if (data.method === 'montecarlo') {
@@ -87,7 +88,8 @@
                 batchSum += result;
                 taskCount++;
 
-                if (taskCount >= subBatchSize || taskCount === batch.length) {
+                // Send results when we reach the sub-batch size OR when we're at the last task
+                if (taskCount >= subBatchSize || i === batch.length - 1) {
                     resultSocket.emit("batch_result", {
                         batchId: firstTaskId,
                         clientId: clientId,
@@ -100,8 +102,10 @@
                         y_max: batch[0].y_max
                     });
 
+                    // Reset for next sub-batch
                     batchSum = 0;
                     taskCount = 0;
+                    firstTaskId = i < batch.length - 1 ? batch[i + 1].taskId : null;
                 }
             }
         });

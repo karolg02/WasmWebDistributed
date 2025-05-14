@@ -71,35 +71,76 @@ async function broadcastQueueStatus() {
 async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
     const benchmarks = selectedWorkerIds.map(id => ({
         id,
-        benchmarkScore: workers.get(id)?.benchmarkScore
+        benchmarkScore: workers.get(id)?.benchmarkScore || 0.1
     }));
 
     const totalBenchmarkScore = benchmarks.reduce((sum, worker) => sum + worker.benchmarkScore, 0);
 
+    // Calculate how many tasks each worker should get
     const taskCountPerWorker = benchmarks.map(worker => ({
         id: worker.id,
         count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length),
-        batchSize: Math.max(50, Math.min(500, Math.floor(worker.benchmarkScore * 200)))
+        // Round batchSize to nearest multiple of 50 for more consistent batches
+        batchSize: Math.max(50, Math.min(1000, Math.round((worker.benchmarkScore * 200) / 50) * 50))
     }));
 
+    console.log("Worker distribution:", taskCountPerWorker.map(w =>
+        `${w.id.substring(0, 8)}: ${w.count} tasks, ${w.batchSize} batch size`
+    ));
+
+    // Distribute remaining tasks
     let assigned = taskCountPerWorker.reduce((sum, worker) => sum + worker.count, 0);
     let remaining = tasks.length - assigned;
-    for (let i = 0; remaining > 0 && i < taskCountPerWorker.length; i++) {
-        taskCountPerWorker[i].count += 1;
-        remaining--;
+
+    // Distribute remaining tasks more evenly based on benchmark score ratio
+    if (remaining > 0) {
+        const workersByScore = [...taskCountPerWorker]
+            .sort((a, b) => (b.benchmarkScore || 0) - (a.benchmarkScore || 0));
+
+        for (let i = 0; remaining > 0; i = (i + 1) % workersByScore.length) {
+            workersByScore[i].count += 1;
+            remaining--;
+        }
     }
 
-    let i = 0;
-    for (const { id, count, batchSize } of taskCountPerWorker) {
+    // Allocate specific tasks to each worker first
+    let taskIndex = 0;
+    const workerTasks = new Map();
+
+    // First, assign tasks to workers
+    for (const { id, count } of taskCountPerWorker) {
+        if (!workerTasks.has(id)) {
+            workerTasks.set(id, []);
+        }
+
+        const workerTaskList = workerTasks.get(id);
+        for (let j = 0; j < count && taskIndex < tasks.length; j++) {
+            const task = tasks[taskIndex];
+            task.clientId = clientId;
+            workerTaskList.push(task);
+            taskIndex++;
+        }
+    }
+
+    // Log how many tasks each worker received
+    for (const [id, taskList] of workerTasks.entries()) {
+        console.log(`Worker ${id.substring(0, 8)} assigned ${taskList.length} tasks`);
+    }
+
+    // Then, send tasks in appropriate batches
+    for (const { id, batchSize } of taskCountPerWorker) {
         const queueName = `tasks.worker_${id}`;
-        for (let j = 0; j < count; j += batchSize) {
-            const batch = [];
-            for (let k = 0; k < batchSize && i < tasks.length; k++, i++) {
-                const task = tasks[i];
-                task.clientId = clientId;
-                batch.push(task);
+        const workerTaskList = workerTasks.get(id) || [];
+        const batchCount = Math.ceil(workerTaskList.length / batchSize);
+
+        console.log(`Sending ${workerTaskList.length} tasks to ${id.substring(0, 8)} in ${batchCount} batches of max ${batchSize} tasks`);
+
+        for (let i = 0; i < workerTaskList.length; i += batchSize) {
+            const batch = workerTaskList.slice(i, i + batchSize);
+            if (batch.length > 0) {
+                channel.sendToQueue(queueName, Buffer.from(JSON.stringify(batch)));
+                console.log(`  Batch ${Math.floor(i / batchSize) + 1}/${batchCount}: ${batch.length} tasks`);
             }
-            channel.sendToQueue(queueName, Buffer.from(JSON.stringify(batch)));
         }
     }
 }
