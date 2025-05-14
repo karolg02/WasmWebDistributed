@@ -18,28 +18,37 @@ export function TasksList() {
     const navigate = useNavigate();
     const [hoveredCard, setHoveredCard] = useState<number | null>(null);
     const { socket } = useSocket();
-    
+
     const tasks: Task[] = [
-        { 
-            id: 1, 
-            name: "Całkowanie sin(x) - Metoda trapezów", 
-            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody trapezów. Zadanie może być podzielone na wiele mniejszych zadań i rozdzielone między przeglądarki.", 
+        {
+            id: 1,
+            name: "Całkowanie sin(x) - Metoda trapezów",
+            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody trapezów. Zadanie może być podzielone na wiele mniejszych zadań i rozdzielone między przeglądarki.",
             image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
             badge: "Matematyka",
             dest: "/client",
-            method: "trapezoidal" 
+            method: "trapezoidal"
         },
-        { 
-            id: 2, 
-            name: "Całkowanie sin(x) - Monte Carlo", 
-            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody Monte Carlo. Próbkowanie losowych punktów dla przybliżonego obliczenia całki.", 
+        {
+            id: 2,
+            name: "Całkowanie sin(x) - Monte Carlo",
+            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody Monte Carlo. Próbkowanie losowych punktów dla przybliżonego obliczenia całki.",
             image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
             badge: "Matematyka",
             dest: "/client",
-            method: "montecarlo" 
+            method: "montecarlo"
+        },
+        {
+            id: 3,
+            name: "Równania różniczkowe",
+            description: "Numeryczne rozwiązywanie równań różniczkowych przy użyciu różnych metod numerycznych.",
+            image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
+            badge: "Matematyka",
+            dest: "/client",
+            method: "dunno"
         },
     ];
-    
+
     const handleTaskSelect = (dest: string, method?: string) => {
         if (socket) {
             navigate(dest, { state: { method } });
@@ -47,20 +56,20 @@ export function TasksList() {
             navigate(dest, { state: { method } });
         }
     };
-    
+
     return (
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
             {tasks.map((task) => (
-                <Card 
-                    key={task.id} 
-                    shadow="md" 
-                    padding="lg" 
-                    radius="md" 
+                <Card
+                    key={task.id}
+                    shadow="md"
+                    padding="lg"
+                    radius="md"
                     withBorder
                     bg="dark.7"
                     onMouseEnter={() => setHoveredCard(task.id)}
                     onMouseLeave={() => setHoveredCard(null)}
-                    style={{ 
+                    style={{
                         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                         transform: hoveredCard === task.id ? 'translateY(-5px)' : 'none',
                         boxShadow: hoveredCard === task.id ? '0 8px 16px rgba(0, 0, 0, 0.3)' : undefined
@@ -87,11 +96,11 @@ export function TasksList() {
 
                     <Transition mounted={hoveredCard === task.id} transition="fade" duration={200}>
                         {(styles) => (
-                            <Button 
-                                color="cyan" 
-                                fullWidth 
-                                mt="md" 
-                                radius="md" 
+                            <Button
+                                color="cyan"
+                                fullWidth
+                                mt="md"
+                                radius="md"
                                 style={styles}
                                 onClick={() => handleTaskSelect(task.dest || "/client", task.method)}
                                 rightSection={<IconArrowRight size={16} />}

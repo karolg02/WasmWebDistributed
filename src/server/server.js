@@ -51,7 +51,7 @@ async function broadcastWorkerList() {
 async function broadcastQueueStatus() {
     const queueStatus = {};
 
-    // Oblicz status dla wszystkich workerów
+    // przetwarzamy statusy workerow
     for (const [workerId, worker] of workers.entries()) {
         const currentClient = workerLocks.get(workerId);
         const queue = workerQueue.get(workerId) || [];
@@ -277,10 +277,8 @@ async function start() {
             const taskInfo = clientTasks.get(clientId);
             if (!taskInfo) return;
 
-            // Aktualizuj bufor
             progressBuffer.set(clientId, { done });
 
-            // Ustaw interwał jeśli jeszcze nie istnieje
             if (!progressIntervals.has(clientId)) {
                 progressIntervals.set(clientId, setInterval(() => {
                     const progress = progressBuffer.get(clientId);
@@ -294,17 +292,14 @@ async function start() {
         socket.on("final_result", ({ clientId, sum, duration }) => {
             const clientSocket = clientSockets.get(clientId);
             if (clientSocket) {
-                // Wyczyść zasoby
                 if (progressIntervals.has(clientId)) {
                     clearInterval(progressIntervals.get(clientId));
                     progressIntervals.delete(clientId);
                 }
                 progressBuffer.delete(clientId);
 
-                // Wyślij wynik końcowy
                 clientSocket.emit("final_result", { sum, duration });
 
-                // Zwolnij workery
                 const taskInfo = clientTasks.get(clientId);
                 if (taskInfo) {
                     for (const wid of taskInfo.workerIds) {
@@ -317,7 +312,7 @@ async function start() {
 
                 // Sprawdź czy są oczekujący klienci
                 tryToGiveTasksForWaitingClients();
-                broadcastQueueStatus(); // Dodaj tutaj
+                broadcastQueueStatus();
             }
         });
 

@@ -29,15 +29,11 @@ extern "C"
   EMSCRIPTEN_KEEPALIVE
   double monte_carlo(double a, double b, int samples, double y_max, int seedOffset = 0)
   {
-    // Better seeding technique (using time and seedOffset)
     srand(time(NULL) + seedOffset * 10000);
 
     int hits = 0;
-
-    // Better sampling loop - use multiple iterations for better randomness
     for (int i = 0; i < samples; i++)
     {
-      // Force re-randomization every 1000 samples
       if (i % 1000 == 0)
       {
         srand(time(NULL) + seedOffset * 10000 + i);

@@ -12,7 +12,7 @@ interface ResultsPanelProps {
     result: number | null;
     duration: number | null;
     tasksPerSecond: number | null;
-    method?: 'trapezoidal' | 'montecarlo';  // Add method prop
+    method?: 'trapezoidal' | 'montecarlo';
 }
 
 export const ResultsPanel: React.FC<ResultsPanelProps> = ({
@@ -23,12 +23,11 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     result,
     duration,
     tasksPerSecond,
-    method = 'trapezoidal'  // Default to trapezoidal
+    method = 'trapezoidal'
 }) => {
     const [showResult, setShowResult] = useState(false);
     const [localStartTime, setLocalStartTime] = useState<number | null>(null);
 
-    // Set local start time when calculation begins
     useEffect(() => {
         if (isCalculating && !localStartTime) {
             setLocalStartTime(Date.now());
@@ -37,7 +36,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         }
     }, [isCalculating]);
 
-    // Calculate progress percentage based on method
     const progressPercentage = (progress.done / taskParams.N) * 100;
 
     useEffect(() => {
@@ -47,10 +45,8 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         }
     }, [result]);
 
-    // Use either the prop startTime or our local one, whichever is available
     const effectiveStartTime = startTime || localStartTime;
 
-    // Get current elapsed time
     const getCurrentElapsedTime = () => {
         if (!effectiveStartTime) return null;
         return (Date.now() - effectiveStartTime) / 1000;
@@ -84,7 +80,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         }
     };
 
-    // Format duration safely
     const formatDuration = (value: any) => {
         if (value === null || value === undefined) return "-";
         if (typeof value === 'number') {
@@ -93,7 +88,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         return `${value} sekund`;
     };
 
-    // Determine progress text based on method
     const getProgressText = () => {
         if (method === 'montecarlo') {
             const doneSamples = progress.done * taskParams.samples;
@@ -104,13 +98,11 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         }
     };
 
-    // Get formatted elapsed time text
     const getElapsedTimeText = () => {
         const elapsed = getCurrentElapsedTime();
         return elapsed ? formatTime(elapsed) : '-';
     };
 
-    // Get remaining time text
     const getRemainingTimeText = () => {
         const remaining = calculateEstimatedTimeRemaining();
         return remaining !== null ? formatTime(remaining) : '-';
