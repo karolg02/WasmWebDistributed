@@ -144,6 +144,7 @@
             const params = calculateProcessingParams(batch);
             console.log(`Parametry przetwarzania: chunkSize=${params.chunkSize}, pauseTime=${params.pauseTime}ms, maxExecTime=${params.maxExecutionTime}ms`);
 
+            // Resetujemy heartbeat dla każdej nowej paczki
             let heartbeatTimer = null;
             if (params.heartbeatInterval > 0) {
                 heartbeatTimer = setInterval(() => {
