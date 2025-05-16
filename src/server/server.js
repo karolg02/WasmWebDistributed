@@ -15,12 +15,11 @@ const clientTasks = new Map();
 const workerLocks = new Map();
 const workerQueue = new Map();
 const waitingClients = new Map();
-const clientStates = new Map();  // Moved from resultManager.js
+const clientStates = new Map();
 
 let channel = null;
 let connection = null;
 
-//do informowania klientow o polaczonych workerach
 async function broadcastWorkerList() {
     const list = Array.from(workers.entries()).map(([id, worker]) => ({
         id,
@@ -40,12 +39,9 @@ async function broadcastWorkerList() {
     io.of("/client").emit("worker_update", list);
 }
 
-// do wyswietlania statusow
 async function broadcastQueueStatus() {
     const queueStatus = {};
-
-    // przetwarzamy statusy workerow
-    for (const [workerId, worker] of workers.entries()) {
+    for (const [workerId] of workers.entries()) {
         const currentClient = workerLocks.get(workerId);
         const queue = workerQueue.get(workerId) || [];
 
@@ -53,39 +49,27 @@ async function broadcastQueueStatus() {
             workerId,
             queueLength: queue.length,
             currentClient: currentClient || null,
-            isAvailable: !currentClient // worker jest dostępny jeśli nie ma currentClient
+            isAvailable: !currentClient
         };
     }
 
     io.of("/client").emit("queue_status", queueStatus);
 }
 
-//lepszy podzial zadan
 async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
     const benchmarks = selectedWorkerIds.map(id => ({
         id,
         benchmarkScore: workers.get(id)?.benchmarkScore || 0.1
     }));
-
     const totalBenchmarkScore = benchmarks.reduce((sum, worker) => sum + worker.benchmarkScore, 0);
-
-    // Calculate how many tasks each worker should get
     const taskCountPerWorker = benchmarks.map(worker => ({
         id: worker.id,
         count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length),
-        // Round batchSize to nearest multiple of 50 for more consistent batches
-        batchSize: Math.max(50, Math.min(1000, Math.round((worker.benchmarkScore * 200) / 50) * 50))
+        batchSize: Math.max(50, Math.min(1000, Math.round((worker.benchmarkScore * 100) / 50) * 50))
     }));
-
-    console.log("Worker distribution:", taskCountPerWorker.map(w =>
-        `${w.id.substring(0, 8)}: ${w.count} tasks, ${w.batchSize} batch size`
-    ));
-
-    // Distribute remaining tasks
     let assigned = taskCountPerWorker.reduce((sum, worker) => sum + worker.count, 0);
     let remaining = tasks.length - assigned;
 
-    // Distribute remaining tasks more evenly based on benchmark score ratio
     if (remaining > 0) {
         const workersByScore = [...taskCountPerWorker]
             .sort((a, b) => (b.benchmarkScore || 0) - (a.benchmarkScore || 0));
@@ -96,11 +80,9 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
         }
     }
 
-    // Allocate specific tasks to each worker first
     let taskIndex = 0;
     const workerTasks = new Map();
 
-    // First, assign tasks to workers
     for (const { id, count } of taskCountPerWorker) {
         if (!workerTasks.has(id)) {
             workerTasks.set(id, []);
@@ -115,24 +97,14 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
         }
     }
 
-    // Log how many tasks each worker received
-    for (const [id, taskList] of workerTasks.entries()) {
-        console.log(`Worker ${id.substring(0, 8)} assigned ${taskList.length} tasks`);
-    }
-
-    // Then, send tasks in appropriate batches
     for (const { id, batchSize } of taskCountPerWorker) {
         const queueName = `tasks.worker_${id}`;
         const workerTaskList = workerTasks.get(id) || [];
-        const batchCount = Math.ceil(workerTaskList.length / batchSize);
-
-        console.log(`Sending ${workerTaskList.length} tasks to ${id.substring(0, 8)} in ${batchCount} batches of max ${batchSize} tasks`);
 
         for (let i = 0; i < workerTaskList.length; i += batchSize) {
             const batch = workerTaskList.slice(i, i + batchSize);
             if (batch.length > 0) {
                 channel.sendToQueue(queueName, Buffer.from(JSON.stringify(batch)));
-                console.log(`  Batch ${Math.floor(i / batchSize) + 1}/${batchCount}: ${batch.length} tasks`);
             }
         }
     }
@@ -155,8 +127,6 @@ async function tryToGiveTasksForWaitingClients() {
             socket: pending.socket,
             workerIds: pending.workerIds
         });
-
-        // Initialize client state tracking
         clientStates.set(clientId, {
             expected: pending.tasks.length,
             completed: 0,
@@ -167,8 +137,6 @@ async function tryToGiveTasksForWaitingClients() {
             totalSamples: pending.tasks[0]?.method === 'montecarlo' ?
                 pending.taskParams?.samples : null
         });
-
-        console.log(`Time for ${clientId} tasks`);
         await tasksDevider3000(pending.tasks, clientId, pending.workerIds);
     }
 }
@@ -204,8 +172,6 @@ async function start() {
             await createQueuePerClient(channel, socket.id, socket);
             broadcastWorkerList();
         });
-
-        // Integration of batch_result handler from resultManager.js
         socket.on("batch_result", (data) => {
             const { clientId, result, tasksCount, method } = data;
             const state = clientStates.get(clientId);
@@ -225,8 +191,6 @@ async function start() {
 
             state.sum += result;
             state.completed += tasksCount;
-
-            // Send progress updates
             const now = Date.now();
             if (now - state.lastUpdate >= 1000 || state.completed === state.expected) {
                 const clientSocket = clientSockets.get(clientId);
@@ -238,8 +202,6 @@ async function start() {
                 }
                 state.lastUpdate = now;
             }
-
-            // If all tasks are completed, send the final result
             if (state.completed === state.expected) {
                 let finalResult = state.sum;
                 if (state.method === 'montecarlo') {
@@ -255,7 +217,6 @@ async function start() {
                     });
                 }
 
-                // Clean up resources
                 const taskInfo = clientTasks.get(clientId);
                 if (taskInfo) {
                     for (const wid of taskInfo.workerIds) {
@@ -267,14 +228,11 @@ async function start() {
                 }
 
                 clientStates.delete(clientId);
-
-                // Check for waiting clients
                 tryToGiveTasksForWaitingClients();
                 broadcastQueueStatus();
             }
         });
 
-        // Add ping/pong for latency measurement
         socket.on("ping_resultSocket", () => {
             socket.emit("pong_resultSocket");
         });
@@ -314,7 +272,6 @@ async function start() {
                     workerIds: selected
                 });
 
-                // Initialize client state tracking
                 clientStates.set(clientId, {
                     expected: tasks.length,
                     completed: 0,
@@ -328,7 +285,6 @@ async function start() {
                 await tasksDevider3000(tasks, clientId, selected);
                 broadcastQueueStatus();
             } else {
-                // worker zajety, dodaje do kolejki
                 waitingClients.set(clientId, {
                     socket,
                     workerIds: selected,

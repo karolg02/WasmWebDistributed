@@ -68,6 +68,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                         disabled={disabled}
                         required
                         radius="md"
+                        min={0.000000001}
                     />
                     <NumberInput
                         label="Ilość zadań"
