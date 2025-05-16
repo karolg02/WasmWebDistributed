@@ -2,19 +2,11 @@ const { Server } = require("socket.io");
 const amqp = require("amqplib");
 const http = require("http");
 const { createTasks } = require("../../create_tasks");
-const { io: ioClient } = require("socket.io-client");
 const { createQueuePerClient } = require("./modules/queue");
 
 const server = http.createServer();
 const io = new Server(server, {
     cors: { origin: "*" }
-});
-
-//polaczenie z resultManagerem
-const resultManagerSocket = ioClient("http://localhost:8090/client");
-
-resultManagerSocket.on("connect", () => {
-    console.log("[Server] Connected to ResultManager!");
 });
 
 const workers = new Map();
@@ -23,6 +15,7 @@ const clientTasks = new Map();
 const workerLocks = new Map();
 const workerQueue = new Map();
 const waitingClients = new Map();
+const clientStates = new Map();  // Moved from resultManager.js
 
 let channel = null;
 let connection = null;
@@ -163,13 +156,16 @@ async function tryToGiveTasksForWaitingClients() {
             workerIds: pending.workerIds
         });
 
-        //zglaszam klienta do resultManagera
-        resultManagerSocket.emit("init_client", {
-            clientId,
+        // Initialize client state tracking
+        clientStates.set(clientId, {
             expected: pending.tasks.length,
+            completed: 0,
+            sum: 0,
+            start: 0,
+            lastUpdate: 0,
             method: pending.tasks[0]?.method,
             totalSamples: pending.tasks[0]?.method === 'montecarlo' ?
-                pending.taskParams?.samples : null // Don't multiply by N
+                pending.taskParams?.samples : null
         });
 
         console.log(`Time for ${clientId} tasks`);
@@ -209,6 +205,80 @@ async function start() {
             broadcastWorkerList();
         });
 
+        // Integration of batch_result handler from resultManager.js
+        socket.on("batch_result", (data) => {
+            const { clientId, result, tasksCount, method } = data;
+            const state = clientStates.get(clientId);
+
+            if (!state) return;
+
+            if (state.completed === 0) {
+                state.start = Date.now();
+                state.method = method;
+
+                if (method === 'montecarlo') {
+                    state.a = data.a;
+                    state.b = data.b;
+                    state.y_max = data.y_max;
+                }
+            }
+
+            state.sum += result;
+            state.completed += tasksCount;
+
+            // Send progress updates
+            const now = Date.now();
+            if (now - state.lastUpdate >= 1000 || state.completed === state.expected) {
+                const clientSocket = clientSockets.get(clientId);
+                if (clientSocket) {
+                    clientSocket.emit("task_progress", {
+                        done: state.completed,
+                        elapsedTime: Math.max(0, (now - state.start) / 1000)
+                    });
+                }
+                state.lastUpdate = now;
+            }
+
+            // If all tasks are completed, send the final result
+            if (state.completed === state.expected) {
+                let finalResult = state.sum;
+                if (state.method === 'montecarlo') {
+                    const area = (state.b - state.a) * state.y_max;
+                    finalResult = (state.sum / state.totalSamples) * area;
+                }
+
+                const clientSocket = clientSockets.get(clientId);
+                if (clientSocket) {
+                    clientSocket.emit("final_result", {
+                        sum: parseFloat(finalResult.toFixed(6)),
+                        duration: ((now - state.start) / 1000).toFixed(2)
+                    });
+                }
+
+                // Clean up resources
+                const taskInfo = clientTasks.get(clientId);
+                if (taskInfo) {
+                    for (const wid of taskInfo.workerIds) {
+                        if (workerLocks.get(wid) === clientId) {
+                            workerLocks.delete(wid);
+                        }
+                    }
+                    clientTasks.delete(clientId);
+                }
+
+                clientStates.delete(clientId);
+
+                // Check for waiting clients
+                tryToGiveTasksForWaitingClients();
+                broadcastQueueStatus();
+            }
+        });
+
+        // Add ping/pong for latency measurement
+        socket.on("ping_resultSocket", () => {
+            socket.emit("pong_resultSocket");
+        });
+
         socket.on("disconnect", () => {
             console.log("[Worker] Disconnected", socket.id);
             const queueName = `tasks.worker_${socket.id}`;
@@ -244,16 +314,15 @@ async function start() {
                     workerIds: selected
                 });
 
-                let totalSamples = null;
-                if (taskParams.method === 'montecarlo') {
-                    totalSamples = taskParams.samples;
-                }
-
-                resultManagerSocket.emit("init_client", {
-                    clientId,
+                // Initialize client state tracking
+                clientStates.set(clientId, {
                     expected: tasks.length,
+                    completed: 0,
+                    sum: 0,
+                    start: 0,
+                    lastUpdate: 0,
                     method: taskParams.method,
-                    totalSamples: totalSamples
+                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.samples : null
                 });
 
                 await tasksDevider3000(tasks, clientId, selected);
@@ -298,71 +367,13 @@ async function start() {
                 clientTasks.delete(socket.id);
             }
 
+            clientStates.delete(socket.id);
             waitingClients.delete(socket.id);
+
             for (const [wid, queue] of workerQueue.entries()) {
                 workerQueue.set(wid, queue.filter(cid => cid !== socket.id));
             }
-            broadcastQueueStatus(); // Dodaj tutaj
-        });
-    });
-
-    //resultManager
-    io.of("/resultManager").on("connection", (socket) => {
-        const progressBuffer = new Map();
-        const progressIntervals = new Map();
-
-        socket.on("task_progress", ({ clientId, done }) => {
-            const clientSocket = clientSockets.get(clientId);
-            if (!clientSocket) return;
-
-            const taskInfo = clientTasks.get(clientId);
-            if (!taskInfo) return;
-
-            progressBuffer.set(clientId, { done });
-
-            if (!progressIntervals.has(clientId)) {
-                progressIntervals.set(clientId, setInterval(() => {
-                    const progress = progressBuffer.get(clientId);
-                    if (progress) {
-                        clientSocket.emit("task_progress", progress);
-                    }
-                }, 1000));
-            }
-        });
-
-        socket.on("final_result", ({ clientId, sum, duration }) => {
-            const clientSocket = clientSockets.get(clientId);
-            if (clientSocket) {
-                if (progressIntervals.has(clientId)) {
-                    clearInterval(progressIntervals.get(clientId));
-                    progressIntervals.delete(clientId);
-                }
-                progressBuffer.delete(clientId);
-
-                clientSocket.emit("final_result", { sum, duration });
-
-                const taskInfo = clientTasks.get(clientId);
-                if (taskInfo) {
-                    for (const wid of taskInfo.workerIds) {
-                        if (workerLocks.get(wid) === clientId) {
-                            workerLocks.delete(wid);
-                        }
-                    }
-                    clientTasks.delete(clientId);
-                }
-
-                // Sprawdź czy są oczekujący klienci
-                tryToGiveTasksForWaitingClients();
-                broadcastQueueStatus();
-            }
-        });
-
-        socket.on("disconnect", () => {
-            for (const [clientId, interval] of progressIntervals) {
-                clearInterval(interval);
-            }
-            progressIntervals.clear();
-            progressBuffer.clear();
+            broadcastQueueStatus();
         });
     });
 

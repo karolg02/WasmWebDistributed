@@ -13,7 +13,6 @@
 <script src="index.js"></script>
 <script>
     const socket = io(`http://${window.location.hostname}:8080/worker`);
-    const resultSocket = io(`http://${window.location.hostname}:8090/worker`);
 
     let score;
     let latency;
@@ -26,9 +25,9 @@
         socket.on("connect", () => {
             const pingStart = performance.now();
 
-            resultSocket.emit("ping_resultSocket");
+            socket.emit("ping_resultSocket");
 
-            resultSocket.on("pong_resultSocket", () => {
+            socket.on("pong_resultSocket", () => {
                 latency = (performance.now() - pingStart).toFixed(2);
 
                 const workerInfo = {
@@ -90,7 +89,7 @@
 
                 // Send results when we reach the sub-batch size OR when we're at the last task
                 if (taskCount >= subBatchSize || i === batch.length - 1) {
-                    resultSocket.emit("batch_result", {
+                    socket.emit("batch_result", {
                         batchId: firstTaskId,
                         clientId: clientId,
                         result: batchSum,
@@ -111,6 +110,5 @@
         });
     };
 </script>
-
 
 </html>
