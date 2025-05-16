@@ -48,11 +48,6 @@
             });
         });
     });
-    setInterval(() => {
-        if (socket && socket.connected) {
-            socket.emit("ping_resultSocket");
-        }
-    }, 5000);
 
     function assessTaskComplexity(task) {
         if (task.method === 'montecarlo') {
@@ -67,9 +62,8 @@
     }
     function calculateProcessingParams(batch) {
         const complexity = assessTaskComplexity(batch[0]);
-        console.log(`Złożoność zadania: ${complexity}`);
-
-        // Dla ekstremalnie złożonych zadań (ponad 10^8 kroków)
+        console.log("Złożoność zadania:", complexity);
+        // przejebane
         if (complexity > 8) {
             return {
                 chunkSize: 1,                  // Tylko jedno zadanie na raz
@@ -79,55 +73,55 @@
                 heartbeatInterval: 3000        // Dodatkowy heartbeat co 3 sekundy
             };
         }
-        // Dla bardzo złożonych zadań (ponad 10^6 kroków)
+        // bardzo ciezkie
         else if (complexity > 6) {
             return {
                 chunkSize: 1,
                 pauseTime: 150,
                 reportEvery: 1,
-                maxExecutionTime: 100,        // ms
+                maxExecutionTime: 100,
                 heartbeatInterval: 5000
             };
         }
-        // Dla złożonych zadań
+        // ciezkie
         else if (complexity > 5) {
             return {
                 chunkSize: 1,
                 pauseTime: 100,
                 reportEvery: 1,
-                maxExecutionTime: 150,        // ms
+                maxExecutionTime: 150,
                 heartbeatInterval: 10000
             };
         }
-        // Dla średnio złożonych zadań
+        // srednie
         else if (complexity > 4) {
             return {
                 chunkSize: 2,
                 pauseTime: 50,
                 reportEvery: 2,
-                maxExecutionTime: 200,        // ms
-                heartbeatInterval: 0         // Wyłącz dodatkowy heartbeat
+                maxExecutionTime: 200,
+                heartbeatInterval: 0
             };
         }
-        // Dla umiarkowanie złożonych zadań
+        // umiarkoweane
         else if (complexity > 3) {
             const baseChunkSize = Math.max(2, Math.min(10, Math.ceil((score * 20) / latency)));
             return {
                 chunkSize: baseChunkSize,
                 pauseTime: 20,
                 reportEvery: Math.max(2, baseChunkSize),
-                maxExecutionTime: 300,        // ms
+                maxExecutionTime: 300,
                 heartbeatInterval: 0
             };
         }
-        // Dla prostych zadań
+        // proste
         else {
             const baseChunkSize = Math.max(5, Math.min(25, Math.ceil((score * 50) / latency)));
             return {
                 chunkSize: baseChunkSize,
                 pauseTime: 10,
                 reportEvery: Math.max(5, baseChunkSize * 2),
-                maxExecutionTime: 500,        // ms
+                maxExecutionTime: 500,
                 heartbeatInterval: 0
             };
         }
@@ -135,29 +129,8 @@
 
     Module.onRuntimeInitialized = () => {
         socket.on("task_batch", (batch) => {
-            console.log(`Otrzymano paczkę z ${batch.length} zadaniami:`,
-                batch[0].method,
-                batch[0].method === 'montecarlo' ?
-                    `samples: ${batch[0].samples}` :
-                    `range: ${batch[0].a}-${batch[0].b}, dx: ${batch[0].dx}`);
-
             const params = calculateProcessingParams(batch);
-            console.log(`Parametry przetwarzania: chunkSize=${params.chunkSize}, pauseTime=${params.pauseTime}ms, maxExecTime=${params.maxExecutionTime}ms`);
-
-            // Resetujemy heartbeat dla każdej nowej paczki
-            let heartbeatTimer = null;
-            if (params.heartbeatInterval > 0) {
-                heartbeatTimer = setInterval(() => {
-                    socket.emit("ping_resultSocket");
-                    console.log("Wysłano heartbeat...");
-                }, params.heartbeatInterval);
-            }
-
-            processBatchTimeboxed(batch, params).finally(() => {
-                if (heartbeatTimer) {
-                    clearInterval(heartbeatTimer);
-                }
-            });
+            processBatchTimeboxed(batch, params);
         });
 
         async function processBatchTimeboxed(batch, params) {
@@ -178,54 +151,40 @@
                 const startTime = performance.now();
                 let tasksProcessedInThisChunk = 0;
                 for (let i = currentIndex; i < endIndex; i++) {
-                    try {
-                        const data = batch[i];
-                        let result;
+                    const data = batch[i];
+                    let result;
 
-                        if (data.method === 'montecarlo') {
-                            const y_max = Math.min(data.y_max || 1.0, 1.0);
-                            const seedOffset = data.seedOffset || 0;
-                            result = Module.ccall(
-                                "monte_carlo",
-                                "number",
-                                ["number", "number", "number", "number", "number"],
-                                [data.a, data.b, data.samples, y_max, seedOffset]
-                            );
-                        } else {
-                            result = Module.ccall(
-                                "add",
-                                "number",
-                                ["number", "number", "number"],
-                                [data.a, data.b, data.dx]
-                            );
-                        }
+                    if (data.method === 'montecarlo') {
+                        const y_max = Math.min(data.y_max || 1.0, 1.0);
+                        const seedOffset = data.seedOffset || 0;
+                        result = Module.ccall(
+                            "monte_carlo",
+                            "number",
+                            ["number", "number", "number", "number", "number"],
+                            [data.a, data.b, data.samples, y_max, seedOffset]
+                        );
+                    } else {
+                        result = Module.ccall(
+                            "add",
+                            "number",
+                            ["number", "number", "number"],
+                            [data.a, data.b, data.dx]
+                        );
+                    }
 
-                        batchSum += result;
-                        taskCount++;
-                        tasksProcessedInThisChunk++;
-                        totalProcessed++;
+                    batchSum += result;
+                    taskCount++;
+                    tasksProcessedInThisChunk++;
+                    totalProcessed++;
 
-                        // Sprawdź, czy nie przekraczamy limitu czasu dla jednego zadania
-                        const currentTime = performance.now();
-                        if (currentTime - startTime > safeExecutionTime) {
-                            break;
-                        }
-                    } catch (error) {
-                        console.error("Błąd przetwarzania zadania:", error);
-                        // Kontynuuj mimo błędu
+                    const currentTime = performance.now();
+                    if (currentTime - startTime > safeExecutionTime) {
+                        console.warn("Przekroczono limit czasu dla zadania:", data.taskId);
+                        break;
                     }
                 }
-
-                // Zaktualizuj indeks na podstawie faktycznie wykonanych zadań
                 currentIndex = startChunkIndex + tasksProcessedInThisChunk;
 
-                // Raportuj postęp co 10%
-                const progressPercent = Math.floor((totalProcessed / totalTasks) * 100);
-                if (progressPercent % 10 === 0) {
-                    console.log(`Postęp: ${progressPercent}% (${totalProcessed}/${totalTasks})`);
-                }
-
-                // Wysyłaj wyniki odpowiednio często, aby klient wiedział o postępie
                 if (taskCount >= params.reportEvery || currentIndex >= batch.length) {
                     try {
                         socket.emit("batch_result", {
@@ -239,8 +198,6 @@
                             b: batch[0].b,
                             y_max: batch[0].y_max
                         });
-
-                        // Resetuj liczniki dla następnej partii
                         batchSum = 0;
                         taskCount = 0;
                         firstTaskId = currentIndex < batch.length ? batch[currentIndex].taskId : null;
@@ -248,19 +205,7 @@
                         console.error("Błąd wysyłania wyników:", error);
                     }
                 }
-
-                // Odetchnij - daj przeglądarce szansę na obsługę innych zdarzeń
-                // Dłuższa przerwa dla złożonych zadań
                 await new Promise(resolve => setTimeout(resolve, params.pauseTime));
-
-                // Dodatkowy heartbeat po każdej paczce dla ekstremalnie złożonych zadań
-                if (params.heartbeatInterval > 0) {
-                    try {
-                        socket.emit("ping_resultSocket");
-                    } catch (error) {
-                        console.error("Błąd wysyłania heartbeat:", error);
-                    }
-                }
             }
         }
     };
