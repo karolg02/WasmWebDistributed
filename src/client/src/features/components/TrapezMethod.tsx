@@ -11,7 +11,8 @@ import {
     Text,
     Alert,
     Accordion,
-    Card
+    Card,
+    Badge
 } from "@mantine/core";
 import { IconCalculator, IconPlayerPlay, IconFunction, IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import { TaskParams } from "../types";
@@ -44,7 +45,7 @@ export const IntegrationTaskForm: React.FC<TaskFormProps> = ({
     };
 
     return (
-        <Paper withBorder p="md" radius="md" bg="dark.7">
+        <Paper withBorder p="md" radius="md" bg="dark.7" c="white">
             <Title order={4} mb="md">
                 <Group gap="xs">
                     <IconCalculator size={20} />
@@ -58,10 +59,23 @@ export const IntegrationTaskForm: React.FC<TaskFormProps> = ({
                 <Stack gap="md">
                     <Card withBorder radius="md" shadow="sm" p="md">
                         <Stack gap="sm">
-                            <Title order={5} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <IconFunction size={18} />
-                                Własna funkcja do całkowania
-                            </Title>
+                            <Group justify="space-between" align="center">
+                                <Title order={5} c="white" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <IconFunction size={18} color="white" />
+                                    Własna funkcja do całkowania
+
+                                </Title>
+                                {compilationResult && (
+                                    <Badge
+                                        color={compilationResult.success ? "#82c91e" : "red"}
+                                        variant="light"
+                                        leftSection={compilationResult.success ? <IconCheck size={18} /> : <IconAlertTriangle size={18} />}
+                                        style={{ alignSelf: "flex-start" }}
+                                    >
+                                        {compilationResult.success ? "Skompilowano" : "Błąd kompilacji"}
+                                    </Badge>
+                                )}
+                            </Group>
 
                             <Textarea
                                 value={taskParams.customFunction || ""}
@@ -73,20 +87,10 @@ export const IntegrationTaskForm: React.FC<TaskFormProps> = ({
                                 autosize
                                 required
                             />
-
-                            {compilationResult && (
-                                <Alert
-                                    icon={compilationResult.success ? <IconCheck size={16} /> : <IconAlertTriangle size={16} />}
-                                    title={compilationResult.success ? "Kompilacja pomyślna" : "Błąd kompilacji"}
-                                    color={compilationResult.success ? "#37b24d" : "red"}
-                                    withCloseButton={!compilationResult.success}
-                                >
-                                </Alert>
-                            )}
                         </Stack>
                     </Card>
 
-                    <Group grow>
+                    <Group grow c="white">
                         <NumberInput
                             label="Zakres a"
                             name="a"
@@ -136,28 +140,13 @@ export const IntegrationTaskForm: React.FC<TaskFormProps> = ({
                                 fullWidth
                                 mt="sm"
                                 size="md"
-                                disabled={disabled || !taskParams.customFunction || taskParams.customFunction.trim() === ""} // Disable if no function
+                                disabled={disabled || !taskParams.customFunction || taskParams.customFunction.trim() === ""}
                                 style={styles}
                                 leftSection={<IconPlayerPlay size={16} />}
-                                color="cyan"
+                                color="violet.6"
                                 radius="md"
                             >
                                 Start
-                            </Button>
-                        )}
-                    </Transition>
-                    <Transition mounted={!!disabled} transition="slide-up" duration={400}>
-                        {(styles) => (
-                            <Button
-                                type="button"
-                                fullWidth
-                                mt="sm"
-                                size="md"
-                                style={styles}
-                                loading
-                                radius="md"
-                            >
-                                Obliczanie...
                             </Button>
                         )}
                     </Transition>

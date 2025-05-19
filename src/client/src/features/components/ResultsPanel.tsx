@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Grid, Transition, Center } from "@mantine/core";
+import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Grid, Transition, Center, Title, Divider } from "@mantine/core";
 import { IconClockHour4, IconCheck, IconCalculator, IconHourglass } from "@tabler/icons-react";
 import { Progress as ProgressType, TaskParams } from "../types";
 import { formatTime } from "../utils/formatTime";
@@ -23,9 +23,9 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     result,
     duration,
     tasksPerSecond,
-    method = 'trapezoidal'
+    method
 }) => {
-    const [showResult, setShowResult] = useState(false);
+    const [, setShowResult] = useState(false);
     const [localStartTime, setLocalStartTime] = useState<number | null>(null);
 
     useEffect(() => {
@@ -117,8 +117,8 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                     >
                         <Stack gap="md">
                             <Group justify="space-between" mb="xs">
-                                <Text size="md" fw={500} c="cyan">Trwa obliczanie...</Text>
-                                <Text size="sm" c="dimmed">
+                                <Text size="md" fw={500} c="#82c91e">Trwa obliczanie...</Text>
+                                <Text size="sm" c="#82c91e">
                                     {progressPercentage.toFixed(1)}%
                                 </Text>
                             </Group>
@@ -129,38 +129,30 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                 radius="xl"
                                 striped
                                 animated
-                                color="cyan"
+                                color="#9775fa"
                             />
 
-                            <Grid gutter="md">
-                                <Grid.Col span={6}>
-                                    <Group>
-                                        <IconClockHour4 size={18} color="#5C5F66" />
-                                        <Text size="sm" c="dimmed">
-                                            Czas wykonywania: {getElapsedTimeText()}
-                                        </Text>
-                                    </Group>
-                                </Grid.Col>
+                            <Group justify="space-between" align="center">
 
-                                <Grid.Col span={6}>
-                                    <Group>
-                                        <IconHourglass size={18} color="#5C5F66" />
-                                        <Text size="sm" c="dimmed">
-                                            Pozostało: {getRemainingTimeText()}
-                                        </Text>
-                                    </Group>
-                                </Grid.Col>
+                                <Text size="md" c="dimmed">
+                                    <IconClockHour4 size={14} color="#5C5F66" style={{ marginRight: "4px" }} />
+                                    Czas wykonywania: {getElapsedTimeText()}
+                                </Text>
+                                <Text size="md" c="dimmed">
+                                    <IconHourglass size={14} color="#5C5F66" style={{ marginRight: "4px" }} />
+                                    Pozostało: {getRemainingTimeText()}
+                                </Text>
+                            </Group>
 
-                                <Grid.Col span={12}>
-                                    <Text ta="center" size="sm">
-                                        {getProgressText()}
-                                    </Text>
-                                </Grid.Col>
-                            </Grid>
+                            <Group justify="center">
+                                <Text ta="center" size="sm" c="white">
+                                    {getProgressText()}
+                                </Text>
+                            </Group>
                         </Stack>
                     </Paper>
                 )}
-            </Transition>
+            </Transition >
 
             <Transition
                 mounted={!isCalculating && result !== null}
@@ -170,53 +162,40 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                 exitDuration={200}
             >
                 {(styles) => (
-                    <Card
-                        withBorder
-                        radius="md"
-                        p="lg"
-                        style={{ ...styles }}
-                        bg="dark.7"
-                    >
-                        <Group justify="space-between" align="flex-start">
-                            <Stack gap="xs">
-                                <Text size="lg" fw={700} c="cyan">Wynik końcowy</Text>
-                                <Text size="xl" fw={500} c="#37b24d" style={{ fontFamily: 'monospace' }}>
-                                    {result !== null ? result.toFixed(6) : "-"}
-                                </Text>
-                                <Group>
-                                    <IconCalculator size={16} color="#5C5F66" />
-                                    <Text size="sm" c="dimmed">
-                                        Czas obliczeń: {formatDuration(duration)}
+                    <>
+                        <Card
+                            withBorder
+                            radius="md"
+                            p="lg"
+                            style={{ ...styles }}
+                            bg="dark.7"
+                        >
+                            <Group justify="space-between" align="flex-start">
+                                <Stack gap="xs">
+                                    <Text size="lg" fw={700} c="#9775fa" >Wynik końcowy</Text>
+                                    <Text size="xl" fw={500} c="#82c91e" style={{ fontFamily: 'monospace' }}>
+                                        {result !== null ? result.toFixed(6) : "-"}
                                     </Text>
-                                </Group>
-                            </Stack>
+                                    <Group>
+                                        <IconCalculator size={16} color="#5C5F66" />
+                                        <Text size="sm" c="dimmed">
+                                            Czas obliczeń: {formatDuration(duration)}
+                                        </Text>
+                                    </Group>
+                                </Stack>
 
-                            <RingProgress
-                                sections={[{ value: 100, color: 'cyan' }]}
-                                size={80}
-                                thickness={8}
-                                roundCaps
-                                label={
-                                    <Center>
-                                        <IconCheck style={{ width: 24, height: 24 }} color="#40C057" />
-                                    </Center>
-                                }
-                            />
-                        </Group>
-                    </Card>
+                                <RingProgress
+                                    sections={[{ value: 100, color: '#7950f2' }]}
+                                    size={80}
+                                    thickness={8}
+                                    roundCaps
+                                    label={<Center>
+                                        <IconCheck style={{ width: 24, height: 24 }} color="#82c91e" />
+                                    </Center>} />
+                            </Group>
+                        </Card></>
                 )}
             </Transition>
-
-            {!isCalculating && result === null && (
-                <Paper
-                    withBorder
-                    radius="md"
-                    p="md"
-                    bg="dark.7"
-                >
-                    <Text c="dimmed" ta="center">Wybierz parametry i kliknij "Start" aby rozpocząć obliczenia</Text>
-                </Paper>
-            )}
         </>
     );
 };

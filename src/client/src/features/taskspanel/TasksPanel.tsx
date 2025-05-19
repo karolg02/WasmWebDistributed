@@ -74,7 +74,7 @@ export function TasksPanel() {
     };
     return (
         <Container size="lg" py="xl">
-            <Paper withBorder shadow="md" radius="md" p="xl" bg="dark.8">
+            <Paper bg="dark.8">
                 {error && (
                     <Alert
                         icon={<IconAlertTriangle size={16} />}
@@ -104,12 +104,10 @@ export function TasksPanel() {
                         compilationResult={functionCompilationResultDisplay} />
                 )}
 
-                <Divider my="xl" />
-
-                <Title order={3} mb="sm" c="white">
+                <Title order={3} mt="lg" mb="sm" c="white">
                     <Group gap="xs">
                         <Text span>Aktywne przeglądarki</Text>
-                        <Badge color="cyan" radius="sm">{workers.length}</Badge>
+                        <Badge color="#7950f2" radius="sm">{workers.length}</Badge>
                     </Group>
                 </Title>
 
@@ -118,7 +116,7 @@ export function TasksPanel() {
                         <Text c="dimmed" ta="center">Brak dostępnych workerów. Otwórz stronę workera w nowej przeglądarce.</Text>
                     </Paper>
                 ) : (
-                    <SimpleGrid cols={{ base: 1, sm: 1, md: 2 }} spacing="sm">
+                    <SimpleGrid cols={{ base: 2, xs: 1, sm: 2, md: 2 }} spacing="sm" mb="sm">
                         {workers.map(worker => {
                             const isSelected = selectedWorkerIds.includes(worker.id);
                             const workerQueueStatus = queueStatus ? queueStatus[worker.id] : null;
@@ -144,9 +142,6 @@ export function TasksPanel() {
                     </SimpleGrid>
                 )}
 
-                <Divider my="xl" />
-
-                <Title order={3} mb="xs" c="white">Wyniki</Title>
                 <ResultsPanel
                     isCalculating={isCalculating}
                     progress={progress}

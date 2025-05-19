@@ -31,7 +31,7 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
 
     return (
         <Card
-            shadow="sm"
+            shadow="lg"
             padding="md"
             radius="md"
             withBorder
@@ -40,8 +40,8 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
                 cursor: "pointer",
                 opacity: queueStatus?.currentClient && !isCurrentClient ? 0.7 : 1,
                 transition: "all 0.2s ease",
-                borderColor: selected ? "#45aaf2" : undefined,
-                borderWidth: selected ? "2px" : "1px",
+                borderColor: selected ? "#7950f2" : undefined,
+                borderWidth: selected ? "2px" : "2px",
                 marginBottom: "10px"
             }}
             onClick={onSelect}
@@ -50,17 +50,17 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
                 <Group gap="xs">
                     {getBrowserIcon(worker.specs.userAgent)}
                     <Stack gap={2}>
-                        <Text size="sm" fw={500} c={selected ? "cyan" : "white"}>
+                        <Text size="sm" fw={500} c="white">
                             {worker.name || worker.id}
                         </Text>
                         <Text size="xs" c="dimmed">
                             {worker.specs.platform}
                         </Text>
                         <Group gap={5}>
-                            <Badge 
-                                color={status.color === "green" ? "teal" : 
-                                      status.color === "red" ? "red" : 
-                                      status.color === "orange" ? "orange" : "gray"}
+                            <Badge
+                                color={status.color === "green" ? "#82c91e" :
+                                    status.color === "red" ? "red" :
+                                        status.color === "orange" ? "orange" : "gray"}
                                 variant="light"
                                 size="xs"
                             >
@@ -79,7 +79,7 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
                         CPU: {worker.specs.hardwareConcurrency} cores
                     </Text>
                     <Text size="xs" c="dimmed">
-                        Score: <Text span c="cyan" fw={500}>{worker.performance.benchmarkScore.toFixed(2)}</Text>
+                        Score: <Text span c="#82c91e" fw={500}>{worker.performance.benchmarkScore.toFixed(2)}</Text>
                     </Text>
                 </Stack>
             </Group>

@@ -23,7 +23,7 @@ export function TasksList() {
         {
             id: 1,
             name: "Całkowanie - Metoda trapezów",
-            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody trapezów. Zadanie może być podzielone na wiele mniejszych zadań i rozdzielone między przeglądarki.",
+            description: "Numeryczne całkowanie dowolnej funkcji przy użyciu metody trapezów. Zadanie może być podzielone na wiele mniejszych zadań i rozdzielone między przeglądarki.",
             image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
             badge: "Matematyka",
             dest: "/client",
@@ -86,7 +86,7 @@ export function TasksList() {
                     <Group space-between="apart" mt="md" mb="xs">
                         <Title order={3} size="h4" fw={500} c="white">{task.name}</Title>
                         {task.badge && (
-                            <Badge color="cyan" variant="light">{task.badge}</Badge>
+                            <Badge color="#82c91e" variant="light">{task.badge}</Badge>
                         )}
                     </Group>
 
@@ -97,7 +97,7 @@ export function TasksList() {
                     <Transition mounted={hoveredCard === task.id} transition="fade" duration={200}>
                         {(styles) => (
                             <Button
-                                color="cyan"
+                                color="violet.6"
                                 fullWidth
                                 mt="md"
                                 radius="md"
