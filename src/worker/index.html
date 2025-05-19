@@ -55,8 +55,6 @@
 
         let normalized = (score - minExpectedScore) / (maxExpectedScore - minExpectedScore);
         normalized = Math.max(0, Math.min(1, normalized));
-
-        console.log(`Współczynnik wydajności urządzenia: ${normalized.toFixed(2)} (benchmarkScore: ${score})`);
         return normalized;
     }
 
@@ -75,8 +73,6 @@
     function calculateProcessingParams(batch) {
         const complexity = assessTaskComplexity(batch[0]);
         const devicePerformance = getDevicePerformanceRating();
-
-        console.log(`Złożoność zadania: ${complexity}, Wydajność urządzenia: ${devicePerformance.toFixed(2)}`);
 
         const performanceMultiplier = 0.5 + devicePerformance;
 
@@ -180,7 +176,6 @@
                 const params = calculateProcessingParams(batch);
 
                 if (testDuration > 200) {
-                    console.log("Zadanie okazało się cięższe, redukcja parametrów przetwarzania");
                     params.chunkSize = Math.max(1, Math.floor(params.chunkSize / 2));
                     params.maxExecutionTime = Math.min(params.maxExecutionTime, testDuration * 2);
                 }
@@ -214,42 +209,38 @@
                 const startTime = performance.now();
                 let tasksProcessedInThisChunk = 0;
 
-                try {
-                    for (let i = currentIndex; i < endIndex; i++) {
-                        const data = batch[i];
-                        let result;
+                for (let i = currentIndex; i < endIndex; i++) {
+                    const data = batch[i];
+                    let result;
 
-                        if (data.method === 'montecarlo') {
-                            const y_max = Math.min(data.y_max || 1.0, 1.0);
-                            const seedOffset = data.seedOffset || 0;
-                            result = Module.ccall(
-                                "monte_carlo",
-                                "number",
-                                ["number", "number", "number", "number", "number"],
-                                [data.a, data.b, data.samples, y_max, seedOffset]
-                            );
-                        } else {
-                            result = Module.ccall(
-                                "add",
-                                "number",
-                                ["number", "number", "number"],
-                                [data.a, data.b, data.dx]
-                            );
-                        }
-
-                        batchSum += result;
-                        taskCount++;
-                        tasksProcessedInThisChunk++;
-                        totalProcessed++;
-
-                        const currentTime = performance.now();
-                        if (currentTime - startTime > safeExecutionTime) {
-                            console.warn("Przekroczono limit czasu dla zadania:", data.taskId);
-                            break;
-                        }
+                    if (data.method === 'montecarlo') {
+                        const y_max = Math.min(data.y_max || 1.0, 1.0);
+                        const seedOffset = data.seedOffset || 0;
+                        result = Module.ccall(
+                            "monte_carlo",
+                            "number",
+                            ["number", "number", "number", "number", "number"],
+                            [data.a, data.b, data.samples, y_max, seedOffset]
+                        );
+                    } else {
+                        result = Module.ccall(
+                            "add",
+                            "number",
+                            ["number", "number", "number"],
+                            [data.a, data.b, data.dx]
+                        );
                     }
-                } catch (error) {
-                    console.error("Błąd przetwarzania zadania:", error);
+
+                    batchSum += result;
+                    taskCount++;
+                    tasksProcessedInThisChunk++;
+                    totalProcessed++;
+
+                    const currentTime = performance.now();
+                    // if (currentTime - startTime > safeExecutionTime) {
+                    //     console.warn("Przekroczono limit czasu dla zadania:", data.taskId);
+                    //     break;
+                    // }
                 }
 
                 currentIndex = startChunkIndex + tasksProcessedInThisChunk;
@@ -274,15 +265,8 @@
                         console.error("Błąd wysyłania wyników:", error);
                     }
                 }
-                if (totalProcessed % 50 === 0) {
-                    const progress = (totalProcessed / totalTasks * 100).toFixed(1);
-                    console.log(`Postęp: ${progress}% (${totalProcessed}/${totalTasks})`);
-                }
-
                 await new Promise(resolve => setTimeout(resolve, params.pauseTime));
             }
-
-            console.log(`Ukończono przetwarzanie ${totalTasks} zadań`);
         }
     };
 </script>
