@@ -1,25 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Container, Paper, Title, Divider, Text, SimpleGrid, Group, Badge } from "@mantine/core";
+import { Container, Paper, Title, Divider, Text, SimpleGrid, Group, Badge, Alert, Button } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
 import { TaskParams } from "../types";
 import { TaskForm } from "../components/TrapezMethod";
 import { MonteCarloForm } from "../components/MonteCarloForm";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkerCard } from "../components/WorkerCard";
-
-// Add new type for Monte Carlo
-interface MonteCarloParams {
-    a: number;
-    b: number;
-    samples: number;
-    y_max: number;
-    N: number;
-}
+import { IconAlertTriangle } from "@tabler/icons-react";
 
 export const ClientPanel: React.FC = () => {
     const location = useLocation();
-    const method = location.state?.method || "trapezoidal";
+    const initialMethod = location.state?.method === 'montecarlo' ? 'montecarlo' : 'trapezoidal';
+    const [currentMethod, setCurrentMethod] = useState<'trapezoidal' | 'montecarlo'>(initialMethod);
+    const [error, setError] = useState<string | null>(null);
 
     const {
         socket,
@@ -31,26 +25,29 @@ export const ClientPanel: React.FC = () => {
         duration,
         isCalculating,
         startTime,
-        tasksPerSecond,
         queueStatus,
-        startTask
+        startTask,
+        compilingFunction,
+        functionCompilationResultDisplay
     } = useSocket();
 
-    // State for trapezoidal method
-    const [taskParams, setTaskParams] = useState<TaskParams>({
+    const [trapezoidalTaskParams, setTrapezoidalTaskParams] = useState<TaskParams>({
+        method: 'trapezoidal',
         a: 0,
-        b: 3.14,
+        b: 3.14159,
         dx: 0.00001,
         N: 100000,
+        customFunction: ""
     });
 
-    // State for Monte Carlo method
-    const [monteCarloParams, setMonteCarloParams] = useState<MonteCarloParams>({
+    const [monteCarloTaskParams, setMonteCarloTaskParams] = useState<TaskParams>({
+        method: 'montecarlo',
         a: 0,
         b: Math.PI,
         samples: 10000,
-        y_max: 1,
-        N: 100
+        y_max: 1.0,
+        N: 100,
+        customFunction: ""
     });
 
     useEffect(() => {
@@ -59,42 +56,65 @@ export const ClientPanel: React.FC = () => {
         }
     }, [socket]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setError(null);
+
         if (selectedWorkerIds.length === 0) {
-            alert("Wybierz co najmniej jednego workera!");
+            setError("Wybierz co najmniej jednego workera!");
             return;
         }
 
-        if (method === "trapezoidal") {
-            startTask(taskParams, selectedWorkerIds);
+        let taskResult;
+        if (currentMethod === "trapezoidal") {
+            if (!trapezoidalTaskParams.customFunction || trapezoidalTaskParams.customFunction.trim() === "") {
+                setError("Ciało funkcji dla metody trapezów nie może być puste.");
+                return;
+            }
+            taskResult = await startTask(trapezoidalTaskParams, selectedWorkerIds);
         } else {
-            socket.emit("start", {
-                workerIds: selectedWorkerIds,
-                taskParams: {
-                    ...monteCarloParams,
-                    method: "montecarlo"
-                }
-            });
+            if (!monteCarloTaskParams.customFunction || monteCarloTaskParams.customFunction.trim() === "") {
+                setError("Ciało funkcji dla metody Monte Carlo nie może być puste.");
+                return;
+            }
+            taskResult = await startTask(monteCarloTaskParams, selectedWorkerIds);
+        }
+
+        if (taskResult && !taskResult.success) {
+            setError(taskResult.error || "Wystąpił błąd podczas uruchamiania zadania");
         }
     };
-
     return (
         <Container size="md" py="xl">
             <Paper withBorder shadow="md" radius="md" p="xl" bg="dark.8">
-                {method === "trapezoidal" ? (
+                {error && (
+                    <Alert
+                        icon={<IconAlertTriangle size={16} />}
+                        title="Błąd"
+                        color="red"
+                        mb="md"
+                        withCloseButton
+                        onClose={() => setError(null)}
+                    >
+                        {error}
+                    </Alert>
+                )}
+
+                {currentMethod === "trapezoidal" ? (
                     <TaskForm
-                        taskParams={taskParams}
-                        setTaskParams={setTaskParams}
+                        taskParams={trapezoidalTaskParams}
+                        setTaskParams={setTrapezoidalTaskParams}
                         onSubmit={handleSubmit}
-                        disabled={isCalculating}
+                        disabled={isCalculating || compilingFunction}
+                        compilationResult={functionCompilationResultDisplay}
                     />
                 ) : (
                     <MonteCarloForm
-                        taskParams={monteCarloParams}
-                        setTaskParams={setMonteCarloParams}
+                        taskParams={monteCarloTaskParams}
+                        setTaskParams={setMonteCarloTaskParams}
                         onSubmit={handleSubmit}
-                        disabled={isCalculating}
+                        disabled={isCalculating || compilingFunction}
+                        compilationResult={functionCompilationResultDisplay}
                     />
                 )}
 
@@ -126,7 +146,7 @@ export const ClientPanel: React.FC = () => {
                                     isCurrentClient={isCurrentClient}
                                     queueStatus={workerQueueStatus}
                                     onSelect={() => {
-                                        if (isCalculating) return;
+                                        if (isCalculating || compilingFunction) return;
                                         if (isSelected) {
                                             setSelectedWorkerIds(prev => prev.filter(id => id !== worker.id));
                                         } else {
@@ -145,13 +165,11 @@ export const ClientPanel: React.FC = () => {
                 <ResultsPanel
                     isCalculating={isCalculating}
                     progress={progress}
-                    taskParams={method === "trapezoidal" ? taskParams : monteCarloParams}
+                    taskParams={currentMethod === "trapezoidal" ? trapezoidalTaskParams : monteCarloTaskParams}
                     startTime={startTime}
                     result={result}
                     duration={duration}
-                    tasksPerSecond={tasksPerSecond}
-                    method={method}
-                />
+                    method={currentMethod} tasksPerSecond={null} />
             </Paper>
         </Container>
     );

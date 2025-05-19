@@ -56,27 +56,17 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         const elapsedTime = getCurrentElapsedTime();
         if (!isCalculating || !elapsedTime || elapsedTime < 1) return null;
 
-        try {
-            if (method === 'montecarlo') {
-                // For Monte Carlo, base calculation on tasks completed
-                const percentComplete = progress.done / taskParams.N;
-                if (percentComplete <= 0 || percentComplete > 0.99) return null;
-
-                const estimatedTotalTime = elapsedTime / percentComplete;
-                return Math.max(0, estimatedTotalTime - elapsedTime);
-            } else {
-                // For trapezoidal, we measure in tasks
-                const currentTasksPerSecond = progress.done / elapsedTime;
-                if (currentTasksPerSecond <= 0) return null;
-
-                const remainingTasks = taskParams.N - progress.done;
-                const effectiveRate = tasksPerSecond && tasksPerSecond > 0 ? tasksPerSecond : currentTasksPerSecond;
-
-                return remainingTasks / effectiveRate;
-            }
-        } catch (error) {
-            console.error("Error calculating time remaining:", error);
-            return null;
+        if (method === 'montecarlo') {
+            const percentComplete = progress.done / taskParams.N;
+            if (percentComplete <= 0 || percentComplete > 0.99) return null;
+            const estimatedTotalTime = elapsedTime / percentComplete;
+            return Math.max(0, estimatedTotalTime - elapsedTime);
+        } else {
+            const currentTasksPerSecond = progress.done / elapsedTime;
+            if (currentTasksPerSecond <= 0) return null;
+            const remainingTasks = taskParams.N - progress.done;
+            const effectiveRate = tasksPerSecond && tasksPerSecond > 0 ? tasksPerSecond : currentTasksPerSecond;
+            return remainingTasks / effectiveRate;
         }
     };
 

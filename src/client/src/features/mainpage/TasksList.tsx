@@ -22,31 +22,31 @@ export function TasksList() {
     const tasks: Task[] = [
         {
             id: 1,
-            name: "Całkowanie sin(x) - Metoda trapezów",
+            name: "Całkowanie - Metoda trapezów",
             description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody trapezów. Zadanie może być podzielone na wiele mniejszych zadań i rozdzielone między przeglądarki.",
             image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
             badge: "Matematyka",
             dest: "/client",
             method: "trapezoidal"
         },
-        {
-            id: 2,
-            name: "Całkowanie sin(x) - Monte Carlo",
-            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody Monte Carlo. Próbkowanie losowych punktów dla przybliżonego obliczenia całki.",
-            image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
-            badge: "Matematyka",
-            dest: "/client",
-            method: "montecarlo"
-        },
-        {
-            id: 3,
-            name: "Równania różniczkowe",
-            description: "Numeryczne rozwiązywanie równań różniczkowych przy użyciu różnych metod numerycznych.",
-            image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
-            badge: "Matematyka",
-            dest: "/client",
-            method: "dunno"
-        },
+        // {
+        //     id: 2,
+        //     name: "Całkowanie sin(x) - Monte Carlo",
+        //     description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody Monte Carlo. Próbkowanie losowych punktów dla przybliżonego obliczenia całki.",
+        //     image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
+        //     badge: "Matematyka",
+        //     dest: "/client",
+        //     method: "montecarlo"
+        // },
+        // {
+        //     id: 3,
+        //     name: "Równania różniczkowe",
+        //     description: "Numeryczne rozwiązywanie równań różniczkowych przy użyciu różnych metod numerycznych.",
+        //     image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
+        //     badge: "Matematyka",
+        //     dest: "/client",
+        //     method: "dunno"
+        // },
     ];
 
     const handleTaskSelect = (dest: string, method?: string) => {

@@ -3,6 +3,11 @@ const amqp = require("amqplib");
 const http = require("http");
 const { createTasks } = require("../../create_tasks");
 const { createQueuePerClient } = require("./modules/queue");
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 const server = http.createServer();
 const io = new Server(server, {
@@ -16,9 +21,15 @@ const workerLocks = new Map();
 const workerQueue = new Map();
 const waitingClients = new Map();
 const clientStates = new Map();
+const activeCustomFunctions = new Map();
 
 let channel = null;
 let connection = null;
+
+const tempDir = path.join(__dirname, '../worker/temp');
+if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+}
 
 async function broadcastWorkerList() {
     const list = Array.from(workers.entries()).map(([id, worker]) => ({
@@ -56,16 +67,22 @@ async function broadcastQueueStatus() {
     io.of("/client").emit("queue_status", queueStatus);
 }
 
-async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
+async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTaskParams) { // Added originalTaskParams
     const benchmarks = selectedWorkerIds.map(id => ({
         id,
-        benchmarkScore: workers.get(id)?.benchmarkScore || 0.1
+        // Ensure workers.get(id) exists and has performance before accessing benchmarkScore
+        benchmarkScore: workers.get(id)?.performance?.benchmarkScore || 0.1
     }));
     const totalBenchmarkScore = benchmarks.reduce((sum, worker) => sum + worker.benchmarkScore, 0);
+
+    // Handle division by zero if totalBenchmarkScore is 0
+    const safeTotalBenchmarkScore = totalBenchmarkScore === 0 ? 1 : totalBenchmarkScore;
+
     const taskCountPerWorker = benchmarks.map(worker => ({
         id: worker.id,
-        count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length),
-        batchSize: Math.max(50, Math.min(1000, Math.round((worker.benchmarkScore * 100) / 50) * 50))
+        count: Math.floor((worker.benchmarkScore / safeTotalBenchmarkScore) * tasks.length),
+        // Use worker's actual benchmarkScore for batchSize calculation
+        batchSize: Math.max(50, Math.min(1000, Math.round(((workers.get(worker.id)?.performance?.benchmarkScore || 0.1) * 100) / 50) * 50))
     }));
     let assigned = taskCountPerWorker.reduce((sum, worker) => sum + worker.count, 0);
     let remaining = tasks.length - assigned;
@@ -92,6 +109,16 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
         for (let j = 0; j < count && taskIndex < tasks.length; j++) {
             const task = tasks[taskIndex];
             task.clientId = clientId;
+
+            // --- THIS IS THE CRITICAL ADDITION ---
+            // if (originalTaskParams.useCustomFunction) { // REMOVED Condition
+            task.useCustomFunction = true; // Always true now
+            task.sanitizedId = originalTaskParams.sanitizedId; // sanitizedId comes from compilation
+            // } else { // REMOVED Else
+            //     task.useCustomFunction = false;
+            // }
+            // --- END OF CRITICAL ADDITION ---
+
             workerTaskList.push(task);
             taskIndex++;
         }
@@ -104,6 +131,7 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
         for (let i = 0; i < workerTaskList.length; i += batchSize) {
             const batch = workerTaskList.slice(i, i + batchSize);
             if (batch.length > 0) {
+                // console.log(`[Server] Sending batch to ${queueName}, first task useCustom: ${batch[0].useCustomFunction}, sanitizedId: ${batch[0].sanitizedId}`); // For debugging
                 channel.sendToQueue(queueName, Buffer.from(JSON.stringify(batch)));
             }
         }
@@ -133,11 +161,12 @@ async function tryToGiveTasksForWaitingClients() {
             sum: 0,
             start: 0,
             lastUpdate: 0,
-            method: pending.tasks[0]?.method,
-            totalSamples: pending.tasks[0]?.method === 'montecarlo' ?
-                pending.taskParams?.samples : null
+            method: pending.taskParams.method, // Use method from pending.taskParams
+            // Use N from pending.taskParams for montecarlo totalSamples
+            totalSamples: pending.taskParams.method === 'montecarlo' ? pending.taskParams.N : null
         });
-        await tasksDevider3000(pending.tasks, clientId, pending.workerIds);
+        // Pass pending.taskParams to tasksDevider3000
+        await tasksDevider3000(pending.tasks, clientId, pending.workerIds, pending.taskParams);
     }
 }
 
@@ -255,10 +284,82 @@ async function start() {
         clientSockets.set(socket.id, socket);
         broadcastWorkerList();
 
-        socket.on("start", async ({ workerIds, taskParams }) => {
-            const selected = workerIds.filter(id => workers.has(id));
-            const tasks = await createTasks(taskParams);
+        socket.on("submit_custom_function", async (data) => {
+            const { functionCode } = data;
             const clientId = socket.id;
+
+            console.log(`[Client] ${clientId} submitted custom function`);
+
+            try {
+                // Validate function code (basic security)
+                if (!functionCode || typeof functionCode !== 'string') {
+                    socket.emit("custom_function_result", {
+                        success: false,
+                        error: "Invalid function code"
+                    });
+                    return;
+                }
+
+                // Compile function
+                const result = await compileFunctionToWasm(clientId, functionCode);
+
+                if (result.success) {
+                    // activeCustomFunctions.set(clientId, true); // Old
+                    activeCustomFunctions.set(clientId, { // Corrected: store sanitizedId
+                        active: true,
+                        sanitizedId: result.sanitizedId
+                    });
+
+
+                    // Notify all workers about the new custom function
+                    io.of("/worker").emit("custom_wasm_available", {
+                        clientId,
+                        sanitizedId: result.sanitizedId, // Ensure this is sent
+                        timestamp: Date.now()
+                    });
+
+                    socket.emit("custom_function_result", {
+                        success: true,
+                        message: "Function compiled successfully",
+                        sanitizedId: result.sanitizedId // Ensure this is sent
+                    });
+                } else {
+                    socket.emit("custom_function_result", {
+                        success: false,
+                        error: result.error
+                    });
+                }
+            } catch (error) {
+                console.error("[Server] Error processing custom function:", error);
+                socket.emit("custom_function_result", {
+                    success: false,
+                    error: "Server error processing function"
+                });
+            }
+        });
+
+        socket.on("start", async ({ workerIds, taskParams }) => {
+            const clientId = socket.id;
+
+            // useCustomFunction flag is removed from taskParams by client,
+            // but server logic now assumes it's always a custom function.
+            // We primarily need to ensure sanitizedId is present.
+            if (!taskParams.customFunction || !taskParams.sanitizedId) {
+                // This case should ideally be prevented by client-side validation & compilation step
+                console.error(`[Server] CRITICAL: Client ${clientId} starting task but customFunction or sanitizedId is missing. TaskParams:`, taskParams);
+                socket.emit("task_error", { error: "Błąd: Funkcja lub jej identyfikator (sanitizedId) są brakujące po stronie serwera." });
+                return;
+            }
+            // taskParams.useCustomFunction = true; // No longer needed to set this explicitly
+
+            const selected = workerIds.filter(id => workers.has(id));
+            if (selected.length === 0) {
+                console.warn(`[Server] No valid workers selected by client ${clientId}. Aborting task.`);
+                socket.emit("task_error", { error: "No valid workers selected or available." });
+                return;
+            }
+            const tasks = await createTasks(taskParams);
+            // const clientId = socket.id; // Moved up
 
             const allAvailable = selected.every(id => !workerLocks.has(id));
 
@@ -278,18 +379,19 @@ async function start() {
                     sum: 0,
                     start: 0,
                     lastUpdate: 0,
-                    method: taskParams.method,
-                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.samples : null
+                    method: taskParams.method, // Ensure taskParams has method
+                    // Use taskParams.N for montecarlo totalSamples if that's where it's defined
+                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.N : null
                 });
 
-                await tasksDevider3000(tasks, clientId, selected);
+                await tasksDevider3000(tasks, clientId, selected, taskParams); // Pass original taskParams
                 broadcastQueueStatus();
             } else {
                 waitingClients.set(clientId, {
                     socket,
                     workerIds: selected,
                     tasks,
-                    taskParams
+                    taskParams // Store original taskParams
                 });
 
                 for (const id of selected) {
@@ -330,6 +432,13 @@ async function start() {
                 workerQueue.set(wid, queue.filter(cid => cid !== socket.id));
             }
             broadcastQueueStatus();
+
+            // Clean up custom function files if any
+            if (activeCustomFunctions.has(socket.id)) {
+                cleanupClientFiles(socket.id);
+                // Notify workers to unload custom WASM
+                io.of("/worker").emit("unload_custom_wasm", { clientId: socket.id });
+            }
         });
     });
 
@@ -339,3 +448,107 @@ async function start() {
 }
 
 start();
+
+// Temp directory already defined at the top of the file
+if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+}
+
+// Function to sanitize JavaScript identifier
+function sanitizeJsIdentifier(id) {
+    // Replace any non-alphanumeric characters (except underscores) with underscores
+    return id.replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+// Function to compile C++ code to WASM
+async function compileFunctionToWasm(clientId, functionCode) {
+    console.log(`[Server] Compiling custom function for client ${clientId}`);
+
+    // Sanitize the client ID for use as a JS identifier
+    const sanitizedId = sanitizeJsIdentifier(clientId);
+
+    // Create a C++ file from template
+    const cppFilePath = path.join(tempDir, `${clientId}.cpp`);
+
+    // Template for the C++ file
+    const cppTemplate = `
+#include <stdio.h>
+#include <cmath>
+#include <stdlib.h>
+#include <time.h>
+#include <emscripten/emscripten.h>
+
+extern "C" {
+    // The user-defined function
+    double funkcja(double x) {
+        return ${functionCode};
+    }
+
+    EMSCRIPTEN_KEEPALIVE
+    double add(double a, double b, double dx) {
+        int N = ceil((b - a) / dx);
+        double dx_adjust = (b - a) / N;
+        int i;
+        double calka = 0.0;
+        for (i = 0; i < N; i++) {
+            double x1 = a + i * dx_adjust;
+            calka += 0.5 * dx_adjust * (funkcja(x1) + funkcja(x1 + dx_adjust));
+        }
+        return (calka);
+    }
+}
+    `;
+
+    fs.writeFileSync(cppFilePath, cppTemplate);
+
+    // Compile the C++ file to WASM
+    try {
+        const wasmFile = path.join(tempDir, `${clientId}.wasm`);
+        const jsFile = path.join(tempDir, `${clientId}.js`);
+
+        // Use the sanitized ID for the module name
+        const compileCommand = `source ~/emsdk/emsdk_env.sh && emcc "${cppFilePath}" -o "${jsFile}" \
+-sEXPORTED_FUNCTIONS=_add \
+-sEXPORTED_RUNTIME_METHODS=ccall \
+-sENVIRONMENT=web \
+-sMODULARIZE=1 \
+-sEXPORT_NAME="Module_${sanitizedId}"`;
+
+        await execPromise(compileCommand);
+
+        console.log(`[Server] Compilation successful for client ${clientId}`);
+
+        // Store both original ID and sanitized ID
+        activeCustomFunctions.set(clientId, {
+            active: true,
+            sanitizedId
+        });
+
+        return {
+            success: true,
+            jsFile,
+            wasmFile,
+            sanitizedId
+        };
+    } catch (error) {
+        console.error(`[Server] Compilation failed for client ${clientId}:`, error);
+        return { success: false, error: error.message };
+    }
+}
+
+function cleanupClientFiles(clientId) {
+    const filesToRemove = [
+        path.join(tempDir, `${clientId}.cpp`),
+        path.join(tempDir, `${clientId}.js`),
+        path.join(tempDir, `${clientId}.wasm`)
+    ];
+
+    filesToRemove.forEach(file => {
+        if (fs.existsSync(file)) {
+            fs.unlinkSync(file);
+            console.log(`[Server] Removed file: ${file}`);
+        }
+    });
+
+    activeCustomFunctions.delete(clientId);
+}
