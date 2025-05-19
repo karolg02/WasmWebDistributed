@@ -91,6 +91,7 @@
 
     socket.on("custom_wasm_available", async (data) => {
         const { clientId, sanitizedId, timestamp } = data;
+        unloadClientModule(clientId);
         await loadClientModule(clientId, sanitizedId);
     });
 

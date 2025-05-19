@@ -180,7 +180,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                         <Group justify="space-between" align="flex-start">
                             <Stack gap="xs">
                                 <Text size="lg" fw={700} c="cyan">Wynik końcowy</Text>
-                                <Text size="xl" fw={500} style={{ fontFamily: 'monospace' }}>
+                                <Text size="xl" fw={500} c="#37b24d" style={{ fontFamily: 'monospace' }}>
                                     {result !== null ? result.toFixed(6) : "-"}
                                 </Text>
                                 <Group>

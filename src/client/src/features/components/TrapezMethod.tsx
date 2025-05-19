@@ -10,7 +10,8 @@ import {
     Textarea,
     Text,
     Alert,
-    Accordion
+    Accordion,
+    Card
 } from "@mantine/core";
 import { IconCalculator, IconPlayerPlay, IconFunction, IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import { TaskParams } from "../types";
@@ -23,7 +24,7 @@ interface TaskFormProps {
     compilationResult: { success: boolean, message?: string, error?: string } | null;
 }
 
-export const TaskForm: React.FC<TaskFormProps> = ({
+export const IntegrationTaskForm: React.FC<TaskFormProps> = ({
     taskParams,
     setTaskParams,
     onSubmit,
@@ -55,40 +56,36 @@ export const TaskForm: React.FC<TaskFormProps> = ({
             </Title>
             <form onSubmit={handleSubmitWithValidation}>
                 <Stack gap="md">
-                    <Accordion variant="separated" radius="md" defaultValue="custom-function">
-                        <Accordion.Item value="custom-function">
-                            <Accordion.Control icon={<IconFunction size={18} />}>
-                                Funkcja na której ma być wykonane całkowanine
-                            </Accordion.Control>
-                            <Accordion.Panel>
-                                <Stack gap="sm">
-                                    <>
-                                        <Textarea
-                                            value={taskParams.customFunction || ""}
-                                            onChange={(e) => setTaskParams(p => ({ ...p, customFunction: e.target.value }))}
-                                            placeholder=""
-                                            minRows={1}
-                                            maxRows={3}
-                                            disabled={disabled}
-                                            autosize
-                                            required
-                                        />
-                                    </>
-                                    {compilationResult && (
-                                        <Alert
-                                            mt="md"
-                                            icon={compilationResult.success ? <IconCheck size={16} /> : <IconAlertTriangle size={16} />}
-                                            title={compilationResult.success ? "Kompilacja pomyślna" : "Błąd kompilacji"}
-                                            color={compilationResult.success ? "green" : "red"}
-                                            withCloseButton={!compilationResult.success}
-                                        >
-                                            {compilationResult.success ? compilationResult.message : compilationResult.error}
-                                        </Alert>
-                                    )}
-                                </Stack>
-                            </Accordion.Panel>
-                        </Accordion.Item>
-                    </Accordion>
+                    <Card withBorder radius="md" shadow="sm" p="md">
+                        <Stack gap="sm">
+                            <Title order={5} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <IconFunction size={18} />
+                                Własna funkcja do całkowania
+                            </Title>
+
+                            <Textarea
+                                value={taskParams.customFunction || ""}
+                                onChange={(e) => setTaskParams(p => ({ ...p, customFunction: e.target.value }))}
+                                placeholder="f(x)"
+                                minRows={2}
+                                maxRows={4}
+                                disabled={disabled}
+                                autosize
+                                required
+                            />
+
+                            {compilationResult && (
+                                <Alert
+                                    icon={compilationResult.success ? <IconCheck size={16} /> : <IconAlertTriangle size={16} />}
+                                    title={compilationResult.success ? "Kompilacja pomyślna" : "Błąd kompilacji"}
+                                    color={compilationResult.success ? "#37b24d" : "red"}
+                                    withCloseButton={!compilationResult.success}
+                                >
+                                </Alert>
+                            )}
+                        </Stack>
+                    </Card>
+
                     <Group grow>
                         <NumberInput
                             label="Zakres a"
@@ -108,19 +105,19 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                             required
                             radius="md"
                         />
+                        <NumberInput
+                            label="Krok dx"
+                            name="dx"
+                            value={taskParams.dx}
+                            onChange={(val) => setTaskParams(p => ({ ...p, dx: typeof val === "number" ? val : 0.00001 }))}
+                            step={0.00001}
+                            decimalScale={10}
+                            disabled={disabled}
+                            required
+                            radius="md"
+                            min={0.0000000001}
+                        />
                     </Group>
-                    <NumberInput
-                        label="Krok dx"
-                        name="dx"
-                        value={taskParams.dx}
-                        onChange={(val) => setTaskParams(p => ({ ...p, dx: typeof val === "number" ? val : 0.00001 }))}
-                        step={0.00001}
-                        decimalScale={10}
-                        disabled={disabled}
-                        required
-                        radius="md"
-                        min={0.0000000001}
-                    />
                     <NumberInput
                         label="Ilość zadań (N)"
                         name="N"

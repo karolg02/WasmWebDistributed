@@ -3,32 +3,20 @@ import { useLocation } from "react-router-dom";
 import { Container, Paper, Title, Divider, Text, SimpleGrid, Group, Badge, Alert, Button } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
 import { TaskParams } from "../types";
-import { TaskForm } from "../components/TrapezMethod";
+import { IntegrationTaskForm } from "../components/TrapezMethod";
 import { MonteCarloForm } from "../components/MonteCarloForm";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkerCard } from "../components/WorkerCard";
 import { IconAlertTriangle } from "@tabler/icons-react";
 
-export const ClientPanel: React.FC = () => {
+export function TasksPanel() {
     const location = useLocation();
     const initialMethod = location.state?.method === 'montecarlo' ? 'montecarlo' : 'trapezoidal';
     const [currentMethod, setCurrentMethod] = useState<'trapezoidal' | 'montecarlo'>(initialMethod);
     const [error, setError] = useState<string | null>(null);
 
     const {
-        socket,
-        workers,
-        selectedWorkerIds,
-        setSelectedWorkerIds,
-        progress,
-        result,
-        duration,
-        isCalculating,
-        startTime,
-        queueStatus,
-        startTask,
-        compilingFunction,
-        functionCompilationResultDisplay
+        socket, workers, selectedWorkerIds, setSelectedWorkerIds, progress, result, duration, isCalculating, startTime, queueStatus, startTask, compilingFunction, functionCompilationResultDisplay
     } = useSocket();
 
     const [trapezoidalTaskParams, setTrapezoidalTaskParams] = useState<TaskParams>({
@@ -85,7 +73,7 @@ export const ClientPanel: React.FC = () => {
         }
     };
     return (
-        <Container size="md" py="xl">
+        <Container size="lg" py="xl">
             <Paper withBorder shadow="md" radius="md" p="xl" bg="dark.8">
                 {error && (
                     <Alert
@@ -101,21 +89,19 @@ export const ClientPanel: React.FC = () => {
                 )}
 
                 {currentMethod === "trapezoidal" ? (
-                    <TaskForm
+                    <IntegrationTaskForm
                         taskParams={trapezoidalTaskParams}
                         setTaskParams={setTrapezoidalTaskParams}
                         onSubmit={handleSubmit}
                         disabled={isCalculating || compilingFunction}
-                        compilationResult={functionCompilationResultDisplay}
-                    />
+                        compilationResult={functionCompilationResultDisplay} />
                 ) : (
                     <MonteCarloForm
                         taskParams={monteCarloTaskParams}
                         setTaskParams={setMonteCarloTaskParams}
                         onSubmit={handleSubmit}
                         disabled={isCalculating || compilingFunction}
-                        compilationResult={functionCompilationResultDisplay}
-                    />
+                        compilationResult={functionCompilationResultDisplay} />
                 )}
 
                 <Divider my="xl" />
@@ -152,8 +138,7 @@ export const ClientPanel: React.FC = () => {
                                         } else {
                                             setSelectedWorkerIds(prev => [...prev, worker.id]);
                                         }
-                                    }}
-                                />
+                                    }} />
                             );
                         })}
                     </SimpleGrid>
@@ -173,4 +158,4 @@ export const ClientPanel: React.FC = () => {
             </Paper>
         </Container>
     );
-};
+}
