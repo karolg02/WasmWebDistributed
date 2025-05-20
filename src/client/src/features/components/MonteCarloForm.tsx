@@ -1,39 +1,37 @@
 import React from "react";
-import { Stack, Group, NumberInput, Button, Paper, Title, Transition } from "@mantine/core";
-import { IconCalculator, IconPlayerPlay } from "@tabler/icons-react";
-
-interface MonteCarloParams {
-    a: number;
-    b: number;
-    samples: number;
-    y_max: number;
-    N: number;
-}
+import {
+    Stack,
+    Group,
+    NumberInput,
+    Button,
+    Paper,
+    Title,
+    Transition,
+    Textarea,
+    Badge,
+    Card
+} from "@mantine/core";
+import { IconCalculator, IconPlayerPlay, IconFunction, IconAlertTriangle, IconCheck } from "@tabler/icons-react";
+import { TaskParams } from "../types";
 
 interface MonteCarloFormProps {
-    taskParams: MonteCarloParams;
-    setTaskParams: React.Dispatch<React.SetStateAction<MonteCarloParams>>;
+    taskParams: TaskParams;
+    setTaskParams: React.Dispatch<React.SetStateAction<TaskParams>>;
     onSubmit: (e: React.FormEvent) => void;
     disabled?: boolean;
+    compilationResult: { success: boolean, message?: string, error?: string } | null;
 }
 
 export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
     taskParams,
     setTaskParams,
     onSubmit,
-    disabled
+    disabled,
+    compilationResult
 }) => {
 
-    const handleInputChange = (name: string, value: number) => {
-        setTaskParams((prev) => ({
-            ...prev,
-            [name]: value
-        }));
-        console.log(`Updated ${name} to ${value}`);
-    };
-
     return (
-        <Paper withBorder p="md" radius="md" bg="dark.7">
+        <Paper withBorder p="md" radius="md" bg="dark.7" c="white">
             <Title order={4} mb="md">
                 <Group gap="xs">
                     <IconCalculator size={20} />
@@ -42,12 +40,44 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
             </Title>
             <form onSubmit={onSubmit}>
                 <Stack gap="md">
+                    <Card withBorder radius="md" shadow="sm" p="md">
+                        <Stack gap="sm">
+                            <Group justify="space-between" align="center">
+                                <Title order={5} c="white" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <IconFunction size={18} color="white" />
+                                    Własna funkcja do całkowania
+
+                                </Title>
+                                {compilationResult && (
+                                    <Badge
+                                        color={compilationResult.success ? "#82c91e" : "red"}
+                                        variant="light"
+                                        leftSection={compilationResult.success ? <IconCheck size={18} /> : <IconAlertTriangle size={18} />}
+                                        style={{ alignSelf: "flex-start" }}
+                                    >
+                                        {compilationResult.success ? "Skompilowano" : "Błąd kompilacji"}
+                                    </Badge>
+                                )}
+                            </Group>
+
+                            <Textarea
+                                value={taskParams.customFunction || ""}
+                                onChange={(e) => setTaskParams(p => ({ ...p, customFunction: e.target.value }))}
+                                placeholder="f(x)"
+                                minRows={2}
+                                maxRows={4}
+                                disabled={disabled}
+                                autosize
+                                required
+                            />
+                        </Stack>
+                    </Card>
                     <Group grow>
                         <NumberInput
                             label="Zakres a"
                             name="a"
                             value={taskParams.a}
-                            onChange={(val) => setTaskParams(p => ({ ...p, a: typeof val === "number" ? val : 0 }))}
+                            onChange={(val) => setTaskParams(p => ({ ...p, method: 'montecarlo', a: typeof val === "number" ? val : 0 }))}
                             disabled={disabled}
                             required
                             radius="md"
@@ -56,7 +86,7 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                             label="Zakres b"
                             name="b"
                             value={taskParams.b}
-                            onChange={(val) => setTaskParams(p => ({ ...p, b: typeof val === "number" ? val : 0 }))}
+                            onChange={(val) => setTaskParams(p => ({ ...p, method: 'montecarlo', b: typeof val === "number" ? val : 0 }))}
                             disabled={disabled}
                             required
                             radius="md"
@@ -66,7 +96,7 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                         label="Liczba próbek na zadanie"
                         name="samples"
                         value={taskParams.samples}
-                        onChange={(val) => setTaskParams(p => ({ ...p, samples: typeof val === "number" ? val : 10000 }))}
+                        onChange={(val) => setTaskParams(p => ({ ...p, method: 'montecarlo', samples: typeof val === "number" ? val : 10000 }))}
                         min={1000}
                         step={1000}
                         disabled={disabled}
@@ -74,29 +104,17 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                         radius="md"
                     />
                     <NumberInput
-                        label="Maksymalna wartość Y"
-                        name="y_max"
-                        value={taskParams.y_max}
-                        onChange={(val) => setTaskParams(p => ({
-                            ...p,
-                            y_max: typeof val === "number" ? Math.min(val, 1.0) : 1.0
-                        }))}
-                        defaultValue={1.0}
-                        max={1.0}
-                        description="Dla sin(x) maksymalna wartość to 1.0"
-                        disabled={disabled}
-                        required
-                        radius="md"
-                    />
-                    <NumberInput
-                        label="Ilość zadań"
+                        label="Ilość zadań (N)"
                         name="N"
+                        description="Całkowita liczba zadań do podziału między workerów (nie mniej niż liczba próbek)"
                         value={taskParams.N}
-                        onChange={(val) => setTaskParams(p => ({ ...p, N: typeof val === "number" ? val : 100 }))}
+                        onChange={(val) => setTaskParams(p => ({ ...p, method: 'montecarlo', N: typeof val === "number" ? val : 100 }))}
                         disabled={disabled}
                         required
                         radius="md"
+                        max={taskParams.samples}
                     />
+
                     <Transition mounted={!disabled} transition="slide-up" duration={400}>
                         {(styles) => (
                             <Button
@@ -104,28 +122,13 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                                 fullWidth
                                 mt="sm"
                                 size="md"
-                                disabled={disabled}
+                                disabled={disabled || !taskParams.customFunction || taskParams.customFunction.trim() === ""}
                                 style={styles}
                                 leftSection={<IconPlayerPlay size={16} />}
-                                color="cyan"
+                                color="violet.6"
                                 radius="md"
                             >
                                 Start
-                            </Button>
-                        )}
-                    </Transition>
-                    <Transition mounted={!!disabled} transition="slide-up" duration={400}>
-                        {(styles) => (
-                            <Button
-                                type="button"
-                                fullWidth
-                                mt="sm"
-                                size="md"
-                                style={styles}
-                                loading
-                                radius="md"
-                            >
-                                Obliczanie...
                             </Button>
                         )}
                     </Transition>

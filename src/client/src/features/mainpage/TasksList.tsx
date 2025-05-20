@@ -22,8 +22,8 @@ export function TasksList() {
     const tasks: Task[] = [
         {
             id: 1,
-            name: "Całkowanie sin(x) - Metoda trapezów",
-            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody trapezów. Zadanie może być podzielone na wiele mniejszych zadań i rozdzielone między przeglądarki.",
+            name: "Całkowanie - Metoda trapezów",
+            description: "Numeryczne całkowanie dowolnej funkcji przy użyciu metody trapezów. Zadanie może być podzielone na wiele mniejszych zadań i rozdzielone między przeglądarki.",
             image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
             badge: "Matematyka",
             dest: "/client",
@@ -31,22 +31,22 @@ export function TasksList() {
         },
         {
             id: 2,
-            name: "Całkowanie sin(x) - Monte Carlo",
-            description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody Monte Carlo. Próbkowanie losowych punktów dla przybliżonego obliczenia całki.",
+            name: "Całkowanie - Monte Carlo",
+            description: "Numeryczne całkowanie dowolnej funkcji przy użyciu metody Monte Carlo. Próbkowanie losowych punktów dla przybliżonego obliczenia całki.",
             image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
             badge: "Matematyka",
             dest: "/client",
             method: "montecarlo"
         },
-        {
-            id: 3,
-            name: "Równania różniczkowe",
-            description: "Numeryczne rozwiązywanie równań różniczkowych przy użyciu różnych metod numerycznych.",
-            image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
-            badge: "Matematyka",
-            dest: "/client",
-            method: "dunno"
-        },
+        // {
+        //     id: 3,
+        //     name: "Równania różniczkowe",
+        //     description: "Numeryczne rozwiązywanie równań różniczkowych przy użyciu różnych metod numerycznych.",
+        //     image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
+        //     badge: "Matematyka",
+        //     dest: "/client",
+        //     method: "dunno"
+        // },
     ];
 
     const handleTaskSelect = (dest: string, method?: string) => {
@@ -86,7 +86,7 @@ export function TasksList() {
                     <Group space-between="apart" mt="md" mb="xs">
                         <Title order={3} size="h4" fw={500} c="white">{task.name}</Title>
                         {task.badge && (
-                            <Badge color="cyan" variant="light">{task.badge}</Badge>
+                            <Badge color="#82c91e" variant="light">{task.badge}</Badge>
                         )}
                     </Group>
 
@@ -97,7 +97,7 @@ export function TasksList() {
                     <Transition mounted={hoveredCard === task.id} transition="fade" duration={200}>
                         {(styles) => (
                             <Button
-                                color="cyan"
+                                color="violet.6"
                                 fullWidth
                                 mt="md"
                                 radius="md"

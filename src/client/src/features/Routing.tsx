@@ -1,5 +1,5 @@
 import { RouteObject, useRoutes } from "react-router-dom";
-import { ClientPanel } from "./taskspanel/TasksPanel";
+import { TasksPanel } from "./taskspanel/TasksPanel";
 import { Layout } from "../components/Layout";
 import { MainPage } from "./mainpage/MainPage";
 import { ClientAcc } from "./clientacc/ClientAcc";
@@ -15,7 +15,7 @@ const routes: RouteObject[] = [
             },
             {
                 path: "/client",
-                element: <ClientPanel />
+                element: <TasksPanel />
             },
             {
 

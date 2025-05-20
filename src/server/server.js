@@ -3,6 +3,9 @@ const amqp = require("amqplib");
 const http = require("http");
 const { createTasks } = require("../../create_tasks");
 const { createQueuePerClient } = require("./modules/queue");
+const fs = require('fs');
+const path = require('path');
+const { compileTrapezIntegration, compileMonteCarlo, cleanupClientFiles } = require('./modules/compiler-service'); // Import compileMonteCarlo
 
 const server = http.createServer();
 const io = new Server(server, {
@@ -16,9 +19,15 @@ const workerLocks = new Map();
 const workerQueue = new Map();
 const waitingClients = new Map();
 const clientStates = new Map();
+const activeCustomFunctions = new Map();
 
 let channel = null;
 let connection = null;
+
+const tempDir = path.join(__dirname, '../worker/temp');
+if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+}
 
 async function broadcastWorkerList() {
     const list = Array.from(workers.entries()).map(([id, worker]) => ({
@@ -56,16 +65,17 @@ async function broadcastQueueStatus() {
     io.of("/client").emit("queue_status", queueStatus);
 }
 
-async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
+async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTaskParams) {
     const benchmarks = selectedWorkerIds.map(id => ({
         id,
-        benchmarkScore: workers.get(id)?.benchmarkScore || 0.1
+        benchmarkScore: workers.get(id)?.performance?.benchmarkScore || 0.1
     }));
     const totalBenchmarkScore = benchmarks.reduce((sum, worker) => sum + worker.benchmarkScore, 0);
+
     const taskCountPerWorker = benchmarks.map(worker => ({
         id: worker.id,
         count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length),
-        batchSize: Math.max(50, Math.min(1000, Math.round((worker.benchmarkScore * 100) / 50) * 50))
+        batchSize: Math.max(50, Math.min(1000, Math.round(((workers.get(worker.id)?.performance?.benchmarkScore || 0.1) * 100) / 50) * 50))
     }));
     let assigned = taskCountPerWorker.reduce((sum, worker) => sum + worker.count, 0);
     let remaining = tasks.length - assigned;
@@ -92,6 +102,8 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds) {
         for (let j = 0; j < count && taskIndex < tasks.length; j++) {
             const task = tasks[taskIndex];
             task.clientId = clientId;
+            task.useCustomFunction = true;
+            task.sanitizedId = originalTaskParams.sanitizedId;
             workerTaskList.push(task);
             taskIndex++;
         }
@@ -133,11 +145,10 @@ async function tryToGiveTasksForWaitingClients() {
             sum: 0,
             start: 0,
             lastUpdate: 0,
-            method: pending.tasks[0]?.method,
-            totalSamples: pending.tasks[0]?.method === 'montecarlo' ?
-                pending.taskParams?.samples : null
+            method: pending.taskParams.method,
+            totalSamples: pending.taskParams.method === 'montecarlo' ? pending.taskParams.samples : null // Corrected: use samples for Monte Carlo
         });
-        await tasksDevider3000(pending.tasks, clientId, pending.workerIds);
+        await tasksDevider3000(pending.tasks, clientId, pending.workerIds, pending.taskParams);
     }
 }
 
@@ -185,7 +196,6 @@ async function start() {
                 if (method === 'montecarlo') {
                     state.a = data.a;
                     state.b = data.b;
-                    state.y_max = data.y_max;
                 }
             }
 
@@ -205,8 +215,11 @@ async function start() {
             if (state.completed === state.expected) {
                 let finalResult = state.sum;
                 if (state.method === 'montecarlo') {
-                    const area = (state.b - state.a) * state.y_max;
-                    finalResult = (state.sum / state.totalSamples) * area;
+                    if (state.totalSamples && state.totalSamples > 0 && typeof state.a === 'number' && typeof state.b === 'number') {
+                        finalResult = (state.b - state.a) * (state.sum / state.totalSamples);
+                    } else {
+                        finalResult = NaN;
+                    }
                 }
 
                 const clientSocket = clientSockets.get(clientId);
@@ -255,10 +268,56 @@ async function start() {
         clientSockets.set(socket.id, socket);
         broadcastWorkerList();
 
+        socket.on("submit_custom_function", async (data) => {
+            const { functionCode, method } = data;
+            const clientId = socket.id;
+
+            //console.log(`[Client] ${clientId} submitted custom function for method: ${method}`);
+
+            let result;
+            //tu logika tego co kompilujemy
+            if (method === 'montecarlo') {
+                result = await compileMonteCarlo(clientId, functionCode, tempDir);
+            } else if (method === 'trapezoidal') {
+                result = await compileTrapezIntegration(clientId, functionCode, tempDir);
+            } else {
+                socket.emit("custom_function_result", {
+                    success: false,
+                    error: "Invalid method specified for custom function compilation."
+                });
+                return;
+            }
+
+            if (result.success) {
+                activeCustomFunctions.set(clientId, {
+                    active: true,
+                    sanitizedId: result.sanitizedId
+                });
+
+                io.of("/worker").emit("custom_wasm_available", {
+                    clientId,
+                    sanitizedId: result.sanitizedId,
+                    timestamp: Date.now()
+                });
+
+                socket.emit("custom_function_result", {
+                    success: true,
+                    message: "Function compiled successfully",
+                    sanitizedId: result.sanitizedId
+                });
+            } else {
+                socket.emit("custom_function_result", {
+                    success: false,
+                    error: result.error
+                });
+            }
+        });
+
         socket.on("start", async ({ workerIds, taskParams }) => {
+            const clientId = socket.id;
+
             const selected = workerIds.filter(id => workers.has(id));
             const tasks = await createTasks(taskParams);
-            const clientId = socket.id;
 
             const allAvailable = selected.every(id => !workerLocks.has(id));
 
@@ -279,10 +338,10 @@ async function start() {
                     start: 0,
                     lastUpdate: 0,
                     method: taskParams.method,
-                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.samples : null
+                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.samples : null // Corrected: use samples for Monte Carlo
                 });
 
-                await tasksDevider3000(tasks, clientId, selected);
+                await tasksDevider3000(tasks, clientId, selected, taskParams);
                 broadcastQueueStatus();
             } else {
                 waitingClients.set(clientId, {
@@ -330,6 +389,12 @@ async function start() {
                 workerQueue.set(wid, queue.filter(cid => cid !== socket.id));
             }
             broadcastQueueStatus();
+
+            if (activeCustomFunctions.has(socket.id)) {
+                cleanupClientFiles(socket.id, tempDir);
+                activeCustomFunctions.delete(socket.id);
+                io.of("/worker").emit("unload_custom_wasm", { clientId: socket.id });
+            }
         });
     });
 

@@ -52,7 +52,7 @@ export const Layout = () => {
                             size="sm"
                             color={theme.colors.gray[5]}
                         />
-                        <Text fw={700} size="lg" c="cyan">Web Distributed Computing</Text>
+                        <Text fw={700} size="lg" c="#82c91e">Web Distributed Computing</Text>
                     </Group>
                 </Group>
             </AppShell.Header>

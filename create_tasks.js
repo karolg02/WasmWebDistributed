@@ -31,7 +31,7 @@ async function createTrapezoidalTasks({ a = 0, b = Math.PI, dx = 0.000001, N = 1
     return tasks;
 }
 
-async function createMonteCarloTasks({ a = 0, b = Math.PI, samples = 10000, y_max = 1, N = 10000 }) {
+async function createMonteCarloTasks({ a = 0, b = Math.PI, samples = 10000, N = 10000 }) {
     const tasks = [];
     const samplesPerTask = Math.floor(samples / N);
 
@@ -42,7 +42,6 @@ async function createMonteCarloTasks({ a = 0, b = Math.PI, samples = 10000, y_ma
             a: a,
             b: b,
             samples: samplesPerTask,
-            y_max: y_max,
             taskId: `mc_task_${i}`,
             seedOffset: i
         });
