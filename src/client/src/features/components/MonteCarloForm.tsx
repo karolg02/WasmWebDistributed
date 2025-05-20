@@ -112,7 +112,7 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                         disabled={disabled}
                         required
                         radius="md"
-                        min={taskParams.samples}
+                        max={taskParams.samples}
                     />
 
                     <Transition mounted={!disabled} transition="slide-up" duration={400}>
