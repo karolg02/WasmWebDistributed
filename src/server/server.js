@@ -196,7 +196,6 @@ async function start() {
                 if (method === 'montecarlo') {
                     state.a = data.a;
                     state.b = data.b;
-                    state.y_max = data.y_max;
                 }
             }
 
@@ -216,8 +215,11 @@ async function start() {
             if (state.completed === state.expected) {
                 let finalResult = state.sum;
                 if (state.method === 'montecarlo') {
-                    const area = (state.b - state.a) * state.y_max;
-                    finalResult = (state.sum / state.totalSamples) * area;
+                    if (state.totalSamples && state.totalSamples > 0 && typeof state.a === 'number' && typeof state.b === 'number') {
+                        finalResult = (state.b - state.a) * (state.sum / state.totalSamples);
+                    } else {
+                        finalResult = NaN;
+                    }
                 }
 
                 const clientSocket = clientSockets.get(clientId);
@@ -270,7 +272,7 @@ async function start() {
             const { functionCode, method } = data;
             const clientId = socket.id;
 
-            console.log(`[Client] ${clientId} submitted custom function for method: ${method}`);
+            //console.log(`[Client] ${clientId} submitted custom function for method: ${method}`);
 
             let result;
             //tu logika tego co kompilujemy

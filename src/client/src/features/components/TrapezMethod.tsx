@@ -63,7 +63,6 @@ export const IntegrationTaskForm: React.FC<TaskFormProps> = ({
                                 <Title order={5} c="white" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <IconFunction size={18} color="white" />
                                     Własna funkcja do całkowania
-
                                 </Title>
                                 {compilationResult && (
                                     <Badge

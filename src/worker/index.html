@@ -34,8 +34,8 @@
             if (taskData.method === 'montecarlo') {
                 moduleToUse.ccall(
                     "monte_carlo", "number",
-                    ["number", "number", "number", "number", "number"],
-                    [taskData.a, taskData.b, taskData.samples, taskData.y_max || 1.0, 0]
+                    ["number", "number", "number", "number"],
+                    [taskData.a, taskData.b, taskData.samples, 0]
                 );
             } else {
                 moduleToUse.ccall(
@@ -145,7 +145,7 @@
     }
 
     async function processBatchTimeboxed(batch, params, moduleInstance) {
-        if (!moduleInstance || typeof moduleInstance.ccall !== 'function') { // Added check for ccall
+        if (!moduleInstance || typeof moduleInstance.ccall !== 'function') {
             console.error("[Worker] processBatchTimeboxed called without a valid moduleInstance or ccall is missing.");
             const firstTask = batch[0];
             if (firstTask && firstTask.clientId) {
@@ -175,14 +175,13 @@
                 let result;
 
                 if (data.method === 'montecarlo') {
-                    const y_max = Math.min(data.y_max || 1.0, 1.0);
                     const seedOffset = data.seedOffset || 0;
                     result = moduleInstance.ccall(
                         "monte_carlo", "number",
-                        ["number", "number", "number", "number", "number"],
-                        [data.a, data.b, data.samples, y_max, seedOffset]
+                        ["number", "number", "number", "number"],
+                        [data.a, data.b, data.samples, seedOffset]
                     );
-                } else { // trapezoidal
+                } else {
                     result = moduleInstance.ccall(
                         "add", "number",
                         ["number", "number", "number"],
@@ -213,7 +212,6 @@
                         method: method,
                         a: batch[0].a,
                         b: batch[0].b,
-                        y_max: batch[0].y_max
                     });
                     batchSum = 0;
                     taskCount = 0;

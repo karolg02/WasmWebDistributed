@@ -31,7 +31,7 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
 }) => {
 
     return (
-        <Paper withBorder p="md" radius="md" bg="dark.7">
+        <Paper withBorder p="md" radius="md" bg="dark.7" c="white">
             <Title order={4} mb="md">
                 <Group gap="xs">
                     <IconCalculator size={20} />
@@ -104,33 +104,15 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                         radius="md"
                     />
                     <NumberInput
-                        label="Maksymalna wartość Y (do 1.0)"
-                        name="y_max"
-                        value={taskParams.y_max}
-                        onChange={(val) => setTaskParams(p => ({
-                            ...p,
-                            method: 'montecarlo',
-                            y_max: typeof val === "number" ? Math.min(val, 1.0) : 1.0
-                        }))}
-                        decimalScale={2}
-                        step={0.1}
-                        max={1.0}
-                        min={0.01}
-                        description="Maksymalna oczekiwana wartość funkcji w przedziale."
-                        disabled={disabled}
-                        required
-                        radius="md"
-                    />
-                    <NumberInput
                         label="Ilość zadań (N)"
                         name="N"
-                        description="Całkowita liczba zadań do podziału między workerów."
+                        description="Całkowita liczba zadań do podziału między workerów (nie mniej niż liczba próbek)"
                         value={taskParams.N}
                         onChange={(val) => setTaskParams(p => ({ ...p, method: 'montecarlo', N: typeof val === "number" ? val : 100 }))}
                         disabled={disabled}
                         required
                         radius="md"
-                        min={1}
+                        min={taskParams.samples}
                     />
 
                     <Transition mounted={!disabled} transition="slide-up" duration={400}>

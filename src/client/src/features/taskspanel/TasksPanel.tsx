@@ -33,8 +33,7 @@ export function TasksPanel() {
         a: 0,
         b: Math.PI,
         samples: 10000,
-        y_max: 1.0,
-        N: 100,
+        N: 10000,
         customFunction: ""
     });
 

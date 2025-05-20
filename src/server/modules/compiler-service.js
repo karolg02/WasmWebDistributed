@@ -88,29 +88,20 @@ extern "C" {
     }
 
     EMSCRIPTEN_KEEPALIVE
-  double monte_carlo(double a, double b, int samples, double y_max, int seedOffset = 0)
-  {
-    srand(time(NULL) + seedOffset * 10000);
+    double monte_carlo(double a, double b, int samples, int seedOffset = 0) {
+        srand(time(NULL) + seedOffset * 10000); // Basic seeding, consider better RNG for real applications
 
-    int hits = 0;
-    for (int i = 0; i < samples; i++)
-    {
-      if (i % 1000 == 0)
-      {
-        srand(time(NULL) + seedOffset * 10000 + i);
-      }
-
-      double x = a + ((double)rand() / RAND_MAX) * (b - a);
-      double y = ((double)rand() / RAND_MAX) * y_max;
-
-      if (y <= funkcja(x))
-      {
-        hits++;
-      }
+        double sum_fx = 0.0;
+        for (int i = 0; i < samples; i++) {
+            // Ensure consistent seeding for large sample counts if needed, or re-seed less frequently
+            if (i > 0 && i % 10000 == 0) { // Example: re-seed every 10000 samples
+                 srand(time(NULL) + seedOffset * 10000 + i);
+            }
+            double x = a + ((double)rand() / RAND_MAX) * (b - a);
+            sum_fx += funkcja(x);
+        }
+        return sum_fx;
     }
-
-    return hits;
-  }
 }
     `;
 
