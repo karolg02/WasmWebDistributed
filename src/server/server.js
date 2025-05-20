@@ -5,7 +5,7 @@ const { createTasks } = require("../../create_tasks");
 const { createQueuePerClient } = require("./modules/queue");
 const fs = require('fs');
 const path = require('path');
-const { compileFunctionToWasm, cleanupClientFiles } = require('./modules/compiler-service');
+const { compileTrapezIntegration, compileMonteCarlo, cleanupClientFiles } = require('./modules/compiler-service'); // Import compileMonteCarlo
 
 const server = http.createServer();
 const io = new Server(server, {
@@ -146,7 +146,7 @@ async function tryToGiveTasksForWaitingClients() {
             start: 0,
             lastUpdate: 0,
             method: pending.taskParams.method,
-            totalSamples: pending.taskParams.method === 'montecarlo' ? pending.taskParams.N : null
+            totalSamples: pending.taskParams.method === 'montecarlo' ? pending.taskParams.samples : null // Corrected: use samples for Monte Carlo
         });
         await tasksDevider3000(pending.tasks, clientId, pending.workerIds, pending.taskParams);
     }
@@ -267,12 +267,24 @@ async function start() {
         broadcastWorkerList();
 
         socket.on("submit_custom_function", async (data) => {
-            const { functionCode } = data;
+            const { functionCode, method } = data;
             const clientId = socket.id;
 
-            console.log(`[Client] ${clientId} submitted tasks`);
+            console.log(`[Client] ${clientId} submitted custom function for method: ${method}`);
 
-            const result = await compileFunctionToWasm(clientId, functionCode, tempDir);
+            let result;
+            //tu logika tego co kompilujemy
+            if (method === 'montecarlo') {
+                result = await compileMonteCarlo(clientId, functionCode, tempDir);
+            } else if (method === 'trapezoidal') {
+                result = await compileTrapezIntegration(clientId, functionCode, tempDir);
+            } else {
+                socket.emit("custom_function_result", {
+                    success: false,
+                    error: "Invalid method specified for custom function compilation."
+                });
+                return;
+            }
 
             if (result.success) {
                 activeCustomFunctions.set(clientId, {
@@ -324,7 +336,7 @@ async function start() {
                     start: 0,
                     lastUpdate: 0,
                     method: taskParams.method,
-                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.N : null
+                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.samples : null // Corrected: use samples for Monte Carlo
                 });
 
                 await tasksDevider3000(tasks, clientId, selected, taskParams);

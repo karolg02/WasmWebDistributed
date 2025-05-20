@@ -8,9 +8,8 @@ import {
     Title,
     Transition,
     Textarea,
-    Code,
-    Alert,
-    Accordion
+    Badge,
+    Card
 } from "@mantine/core";
 import { IconCalculator, IconPlayerPlay, IconFunction, IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import { TaskParams } from "../types";
@@ -41,6 +40,38 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
             </Title>
             <form onSubmit={onSubmit}>
                 <Stack gap="md">
+                    <Card withBorder radius="md" shadow="sm" p="md">
+                        <Stack gap="sm">
+                            <Group justify="space-between" align="center">
+                                <Title order={5} c="white" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <IconFunction size={18} color="white" />
+                                    Własna funkcja do całkowania
+
+                                </Title>
+                                {compilationResult && (
+                                    <Badge
+                                        color={compilationResult.success ? "#82c91e" : "red"}
+                                        variant="light"
+                                        leftSection={compilationResult.success ? <IconCheck size={18} /> : <IconAlertTriangle size={18} />}
+                                        style={{ alignSelf: "flex-start" }}
+                                    >
+                                        {compilationResult.success ? "Skompilowano" : "Błąd kompilacji"}
+                                    </Badge>
+                                )}
+                            </Group>
+
+                            <Textarea
+                                value={taskParams.customFunction || ""}
+                                onChange={(e) => setTaskParams(p => ({ ...p, customFunction: e.target.value }))}
+                                placeholder="f(x)"
+                                minRows={2}
+                                maxRows={4}
+                                disabled={disabled}
+                                autosize
+                                required
+                            />
+                        </Stack>
+                    </Card>
                     <Group grow>
                         <NumberInput
                             label="Zakres a"
@@ -102,49 +133,6 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                         min={1}
                     />
 
-                    <Accordion variant="separated" radius="md" defaultValue="custom-function-mc">
-                        <Accordion.Item value="custom-function-mc">
-                            <Accordion.Control icon={<IconFunction size={18} />}>
-                                Definicja funkcji
-                            </Accordion.Control>
-                            <Accordion.Panel>
-                                <Stack gap="sm">
-                                    <Textarea
-                                        value={taskParams.customFunction || ""}
-                                        onChange={(e) => setTaskParams(p => ({ ...p, method: 'montecarlo', customFunction: e.target.value }))}
-                                        placeholder="return Math.sin(x);"
-                                        label="Ciało funkcji (np. return Math.sin(x);)"
-                                        description="Funkcja musi przyjmować 'x' i zwracać liczbę."
-                                        minRows={3}
-                                        maxRows={6}
-                                        disabled={disabled}
-                                        autosize
-                                        required
-                                    />
-                                    <Code block>
-                                        double funkcja(double x) {'{'}
-                                        <br />
-                                        &nbsp;&nbsp;&nbsp;&nbsp;{taskParams.customFunction || "return Math.sin(x);"}
-                                        <br />
-                                        {'}'}
-                                    </Code>
-                                    {compilationResult && (
-                                        <Alert
-                                            mt="md"
-                                            icon={compilationResult.success ? <IconCheck size={16} /> : <IconAlertTriangle size={16} />}
-                                            title={compilationResult.success ? "Kompilacja pomyślna" : "Błąd kompilacji"}
-                                            color={compilationResult.success ? "green" : "red"}
-                                            withCloseButton={!compilationResult.success}
-                                        >
-                                            {compilationResult.success ? compilationResult.message : compilationResult.error}
-                                        </Alert>
-                                    )}
-                                </Stack>
-                            </Accordion.Panel>
-                        </Accordion.Item>
-                    </Accordion>
-
-
                     <Transition mounted={!disabled} transition="slide-up" duration={400}>
                         {(styles) => (
                             <Button
@@ -155,25 +143,10 @@ export const MonteCarloForm: React.FC<MonteCarloFormProps> = ({
                                 disabled={disabled || !taskParams.customFunction || taskParams.customFunction.trim() === ""}
                                 style={styles}
                                 leftSection={<IconPlayerPlay size={16} />}
-                                color="cyan"
+                                color="violet.6"
                                 radius="md"
                             >
                                 Start
-                            </Button>
-                        )}
-                    </Transition>
-                    <Transition mounted={!!disabled} transition="slide-up" duration={400}>
-                        {(styles) => (
-                            <Button
-                                type="button"
-                                fullWidth
-                                mt="sm"
-                                size="md"
-                                style={styles}
-                                loading
-                                radius="md"
-                            >
-                                Obliczanie...
                             </Button>
                         )}
                     </Transition>

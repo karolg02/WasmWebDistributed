@@ -59,7 +59,8 @@ export const useSocket = () => {
         setCompilingFunction(true);
         try {
             socket.emit("submit_custom_function", {
-                functionCode: mutableTaskParams.customFunction
+                functionCode: mutableTaskParams.customFunction,
+                method: mutableTaskParams.method // Send the method to the server
             });
 
             const compilationResult = await new Promise<any>((resolve) => {

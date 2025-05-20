@@ -29,15 +29,15 @@ export function TasksList() {
             dest: "/client",
             method: "trapezoidal"
         },
-        // {
-        //     id: 2,
-        //     name: "Całkowanie sin(x) - Monte Carlo",
-        //     description: "Numeryczne całkowanie funkcji sin(x) przy użyciu metody Monte Carlo. Próbkowanie losowych punktów dla przybliżonego obliczenia całki.",
-        //     image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
-        //     badge: "Matematyka",
-        //     dest: "/client",
-        //     method: "montecarlo"
-        // },
+        {
+            id: 2,
+            name: "Całkowanie - Monte Carlo",
+            description: "Numeryczne całkowanie dowolnej funkcji przy użyciu metody Monte Carlo. Próbkowanie losowych punktów dla przybliżonego obliczenia całki.",
+            image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
+            badge: "Matematyka",
+            dest: "/client",
+            method: "montecarlo"
+        },
         // {
         //     id: 3,
         //     name: "Równania różniczkowe",
