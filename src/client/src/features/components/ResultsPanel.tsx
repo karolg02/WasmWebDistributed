@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Grid, Transition, Center, Title, Divider } from "@mantine/core";
+import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Transition, Center } from "@mantine/core";
 import { IconClockHour4, IconCheck, IconCalculator, IconHourglass } from "@tabler/icons-react";
 import { Progress as ProgressType, TaskParams } from "../types";
 import { formatTime } from "../utils/formatTime";

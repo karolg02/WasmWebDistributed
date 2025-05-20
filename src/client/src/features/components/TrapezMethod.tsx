@@ -9,8 +9,6 @@ import {
     Transition,
     Textarea,
     Text,
-    Alert,
-    Accordion,
     Card,
     Badge
 } from "@mantine/core";

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Container, Paper, Title, Divider, Text, SimpleGrid, Group, Badge, Alert, Button } from "@mantine/core";
+import { Container, Paper, Title, Text, SimpleGrid, Group, Badge, Alert } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
 import { TaskParams } from "../types";
 import { IntegrationTaskForm } from "../components/TrapezMethod";
@@ -12,7 +12,7 @@ import { IconAlertTriangle } from "@tabler/icons-react";
 export function TasksPanel() {
     const location = useLocation();
     const initialMethod = location.state?.method === 'montecarlo' ? 'montecarlo' : 'trapezoidal';
-    const [currentMethod, setCurrentMethod] = useState<'trapezoidal' | 'montecarlo'>(initialMethod);
+    const [currentMethod] = useState<'trapezoidal' | 'montecarlo'>(initialMethod);
     const [error, setError] = useState<string | null>(null);
 
     const {
