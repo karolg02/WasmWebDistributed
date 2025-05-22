@@ -3,101 +3,63 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Worker Host Page</title>
-    <style>
-        body {
-            font-family: sans-serif;
-            padding: 20px;
-        }
-
-        #status {
-            margin-top: 20px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            background-color: #f9f9f9;
-        }
-    </style>
-    <!-- Add Socket.IO client library -->
+    <title>Worker</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 
 <body>
-    <h1>Web Worker Computation System</h1>
-    <p>The computation is being handled by a Web Worker in the background. Communication with server is on the main
-        thread.</p>
-    <div id="status">
-        <p>Worker status: Initializing...</p>
-    </div>
-
+    Workeruje
     <script>
         if (window.Worker) {
-            const statusDiv = document.getElementById('status');
-            statusDiv.innerHTML = '<p>Main thread: Loading worker script...</p>';
-
             const myWorker = new Worker('worker.js');
             let socket;
             let latency;
             let benchmarkScore;
 
             function initializeMainConnection() {
-                // Socket.IO connection setup
                 socket = io(`http://${window.location.hostname}:8080/worker`);
 
                 socket.on("connect", () => {
-                    statusDiv.innerHTML = '<p>Main thread: Connected to server. Measuring latency...</p>';
-                    console.log('[Main] Connected to server.');
                     const pingStart = performance.now();
                     socket.emit("ping_resultSocket");
 
                     socket.on("pong_resultSocket", () => {
                         latency = (performance.now() - pingStart).toFixed(2);
-                        statusDiv.innerHTML = `<p>Main thread: Latency measured: ${latency}ms. Requesting benchmark from worker...</p>`;
-                        console.log(`[Main] Latency: ${latency}ms. Requesting benchmark from worker.`);
                         myWorker.postMessage({ type: 'run_benchmark' });
                     });
                 });
 
                 socket.on("task_batch", (batch) => {
-                    console.log('[Main] Received task_batch from server, sending to worker.');
                     myWorker.postMessage({ type: 'task_batch', data: batch });
                 });
 
                 socket.on("custom_wasm_available", (data) => {
-                    console.log('[Main] Received custom_wasm_available from server, sending to worker.');
                     myWorker.postMessage({ type: 'custom_wasm_available', data: data });
                 });
 
                 socket.on("unload_custom_wasm", (data) => {
-                    console.log('[Main] Received unload_custom_wasm from server, sending to worker.');
                     myWorker.postMessage({ type: 'unload_custom_wasm', data: data });
                 });
 
                 socket.on("connect_error", (err) => {
                     console.error("[Main] Connection Error:", err.message);
-                    statusDiv.innerHTML = `<p style="color: red;">Main thread: Connection error - ${err.message}</p>`;
                 });
 
                 socket.on("disconnect", (reason) => {
                     console.log(`[Main] Disconnected from server: ${reason}`);
-                    statusDiv.innerHTML = `<p style="color: orange;">Main thread: Disconnected - ${reason}</p>`;
                 });
             }
 
 
             myWorker.onmessage = function (e) {
-                console.log('[Main] Message received from worker:', e.data);
                 const message = e.data;
 
                 switch (message.type) {
                     case 'worker_script_ready':
-                        statusDiv.innerHTML = '<p>Main thread: Worker script ready. Connecting to server...</p>';
-                        console.log('[Main] Worker script is ready. Initializing main connection.');
-                        initializeMainConnection(); // Now connect to socket
+                        initializeMainConnection();
                         break;
                     case 'benchmark_result':
                         benchmarkScore = message.score;
-                        statusDiv.innerHTML = `<p>Main thread: Benchmark from worker: ${benchmarkScore}. Registering...</p>`;
-                        console.log(`[Main] Benchmark score from worker: ${benchmarkScore}. Registering with server.`);
                         const workerInfo = {
                             system: {
                                 platform: navigator.platform,
@@ -112,30 +74,29 @@
                             }
                         };
                         socket.emit("register", workerInfo);
-                        // After registration, the server should start sending tasks if any.
-                        // We can also emit a "worker_ready" from main thread if server expects it after registration.
-                        // For now, assume server sends tasks upon successful registration.
-                        statusDiv.innerHTML = `<p>Main thread: Registered. Worker ready for tasks.</p>`;
                         break;
-                    case 'batch_result':
-                        console.log('[Main] Received batch_result from worker, sending to server.');
-                        socket.emit("batch_result", message.data);
+                    case 'batch_progress':
+                        const progressDataForServer = {
+                            clientId: message.data.clientId,
+                            result: message.data.partialResult,
+                            tasksCount: message.data.tasksProcessedInChunk,
+                            method: message.data.method,
+                            a: message.data.a,
+                            b: message.data.b,
+                        };
+                        socket.emit("batch_result", progressDataForServer);
+
                         break;
                     case 'task_error':
-                        console.error('[Main] Received task_error from worker, sending to server.');
                         socket.emit("task_error", message.data);
                         break;
-                    case 'worker_error': // General errors from worker logic (e.g. module load failure)
-                        console.error('[Main] Received worker_error from worker, sending to server (if applicable) or logging.');
-                        // Depending on the error, you might want to inform the server
-                        if (message.data.clientId) { // If error is related to a specific client's task/module
-                            socket.emit("worker_error", message.data);
+                    case 'worker_error':
+                        if (message.data.clientId) {
+                            socket.emit("worker_error", { clientId: message.data.clientId, error: message.data.error });
                         }
-                        statusDiv.innerHTML = `<p style="color: red;">Worker reported error: ${message.data.error}</p>`;
                         break;
                     case 'custom_module_loaded':
-                        console.log('[Main] Worker confirmed custom module loaded.');
-                        socket.emit("custom_module_loaded", message.data); // Inform server
+                        socket.emit("custom_module_loaded", message.data);
                         break;
                     default:
                         console.log('[Main] Received unhandled message type from worker:', message.type);
@@ -144,16 +105,9 @@
 
             myWorker.onerror = function (e) {
                 console.error('[Main] Error from worker:', e.message, 'at', e.filename, ':', e.lineno);
-                statusDiv.innerHTML = `<p style="color: red;">Main thread: Worker error - ${e.message}</p>`;
-                // Terminate worker and perhaps try to restart or notify server.
-                // myWorker.terminate();
             };
 
-            // Initial status update, actual "Worker started" will be based on message from worker
-            statusDiv.innerHTML = '<p>Main thread: Worker instance created. Waiting for worker script to be ready...</p>';
-
         } else {
-            document.body.innerHTML = '<h1>Web Workers Not Supported</h1><p>Your browser does not support Web Workers, which are required for this application to run.</p>';
             console.error('[Main] Web Workers are not supported in this browser.');
         }
     </script>

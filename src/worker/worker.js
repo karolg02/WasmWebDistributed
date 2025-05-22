@@ -1,6 +1,4 @@
-// Import necessary scripts. Ensure paths are correct relative to worker.js
 try {
-    // Socket.IO client is no longer needed here
     importScripts('benchmark/benchmark.js');
 } catch (e) {
     console.error('[Worker] Failed to import scripts:', e);
@@ -8,15 +6,9 @@ try {
     throw e;
 }
 
-// const socket = io(`http://${self.location.hostname}:8080/worker`); // REMOVED
-
-let score; // Benchmark score, will be calculated here
-// let latency; // Latency is now handled by main thread
+let score;
 const clientModules = new Map();
 
-// function initializeWorkerInternal() { ... } // REMOVED - no direct socket listeners
-
-// Benchmark and Registration Logic - only benchmark execution here
 function runBenchmark() {
     if (typeof BenchmarkModule === 'function') {
         const benchmarkModuleArgs = {
@@ -34,35 +26,28 @@ function runBenchmark() {
             benchmark.ccall("benchmark");
             const t1 = performance.now();
             score = (1 / Math.max(0.01, (t1 - t0))).toFixed(4) * 1000;
-            console.log('[Worker] Benchmark finished. Score:', score);
             self.postMessage({ type: 'benchmark_result', score: score });
         }).catch(error => {
             console.error("[Worker] Error during benchmark module initialization:", error);
-            score = 0; // Default score on error
+            score = 0;
             self.postMessage({ type: 'benchmark_result', score: score, error: error.message });
         });
     } else {
         console.error("[Worker] BenchmarkModule is not defined.");
-        score = 0; // Default score if module not found
+        score = 0;
         self.postMessage({ type: 'benchmark_result', score: score, error: 'BenchmarkModule not defined' });
     }
 }
 
 self.onmessage = async function (event) {
     const message = event.data;
-    console.log('[Worker] Message received from main thread:', message);
-
     switch (message.type) {
         case 'run_benchmark':
             runBenchmark();
             break;
         case 'task_batch':
             const batch = message.data;
-            if (!batch || batch.length === 0) {
-                console.warn("[Worker] Received empty or invalid task batch from main thread.");
-                return;
-            }
-            const taskData = batch[0]; // Assuming all tasks in batch share clientId and sanitizedId
+            const taskData = batch[0];
             const clientId = taskData.clientId;
             const sanitizedId = taskData.sanitizedId;
             let moduleToUse = null;
@@ -71,7 +56,6 @@ self.onmessage = async function (event) {
                 moduleToUse = clientModules.get(clientId);
                 if (!moduleToUse) {
                     console.log(`[Worker] Module for ${clientId} not in cache. Loading...`);
-                    // Define moduleArgs for locateFile for custom modules
                     const customModuleArgs = {
                         locateFile: (path, prefix) => `temp/${path}`
                     };
@@ -91,14 +75,12 @@ self.onmessage = async function (event) {
             break;
         case 'custom_wasm_available':
             const { clientId: wasmClientId, sanitizedId: wasmSanitizedId } = message.data;
-            console.log(`[Worker] Custom WASM available for clientId: ${wasmClientId}, sanitizedId: ${wasmSanitizedId}. Reloading.`);
             try {
                 unloadClientModule(wasmClientId);
                 const customModuleArgs = {
                     locateFile: (path, prefix) => `temp/${path}`
                 };
                 await loadClientModule(wasmClientId, wasmSanitizedId, customModuleArgs);
-                // loadClientModule will post 'custom_module_loaded'
             } catch (error) {
                 console.error(`[Worker] Error reloading custom WASM for ${wasmClientId}:`, error);
                 self.postMessage({ type: 'worker_error', data: { clientId: wasmClientId, error: `Failed to reload custom WASM: ${error.message}` } });
@@ -106,7 +88,6 @@ self.onmessage = async function (event) {
             break;
         case 'unload_custom_wasm':
             const { clientId: unloadClientId } = message.data;
-            console.log(`[Worker] Unloading custom WASM for clientId: ${unloadClientId}`);
             unloadClientModule(unloadClientId);
             break;
         default:
@@ -142,7 +123,6 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
         }
     } catch (error) {
         console.error(`[Worker] Error loading module script ${scriptSrc} for client ${clientId}:`, error);
-        // Post error back to main thread
         self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Failed to load module script: ${error.message}` } });
         throw error;
     }
@@ -151,17 +131,19 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
 function unloadClientModule(clientId) {
     if (clientModules.has(clientId)) {
         clientModules.delete(clientId);
-        console.log(`[Worker] Unloaded module for clientId: ${clientId} from cache.`);
     }
 }
 
 async function processBatch(batch, moduleInstance) {
     const method = batch[0].method;
     const clientId = batch[0].clientId;
-    const firstTaskIdInBatch = batch[0].taskId;
+    const originalBatchId = batch[0].taskId;
+    const batchA = batch[0].a;
+    const batchB = batch[0].b;
 
-    let totalBatchSum = 0;
-    let totalTasksProcessed = 0;
+    let tasksProcessedInCurrentChunk = 0;
+    let sumForCurrentChunk = 0;
+    const TASKS_PER_PROGRESS_UPDATE = 5;
     const TASKS_BETWEEN_YIELDS = 10;
 
     for (let i = 0; i < batch.length; i++) {
@@ -176,44 +158,45 @@ async function processBatch(batch, moduleInstance) {
                     ["number", "number", "number", "number"],
                     [data.a, data.b, data.samples, seedOffset]
                 );
-            } else { // 'add' method
+            } else {
                 result = moduleInstance.ccall(
                     "add", "number",
                     ["number", "number", "number"],
                     [data.a, data.b, data.dx]
                 );
             }
-            totalBatchSum += result;
-            totalTasksProcessed++;
+            sumForCurrentChunk += result;
+            tasksProcessedInCurrentChunk++;
         } catch (e) {
             console.error(`[Worker] Error executing ccall for task ${data.taskId} (method: ${data.method}):`, e);
-            // Post task error back to main thread
             self.postMessage({ type: 'task_error', data: { taskId: data.taskId, clientId: clientId, error: `ccall execution failed: ${e.message}` } });
+        }
+
+        if (tasksProcessedInCurrentChunk > 0 && (tasksProcessedInCurrentChunk % TASKS_PER_PROGRESS_UPDATE === 0 || (i + 1) === batch.length)) {
+            self.postMessage({
+                type: 'batch_progress',
+                data: {
+                    batchId: originalBatchId,
+                    clientId: clientId,
+                    partialResult: sumForCurrentChunk,
+                    tasksProcessedInChunk: tasksProcessedInCurrentChunk,
+                    totalTasksInBatch: batch.length,
+                    isFinalChunk: (i + 1) === batch.length,
+                    method: method,
+                    a: batchA,
+                    b: batchB
+                }
+            });
+            sumForCurrentChunk = 0;
+            tasksProcessedInCurrentChunk = 0;
         }
 
         if ((i + 1) % TASKS_BETWEEN_YIELDS === 0 && i < batch.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 0));
         }
     }
-
-    if (totalTasksProcessed > 0) {
-        // Post batch result back to main thread
-        self.postMessage({
-            type: 'batch_result',
-            data: {
-                batchId: firstTaskIdInBatch,
-                clientId: clientId,
-                result: totalBatchSum,
-                tasksCount: totalTasksProcessed,
-                method: method,
-                a: batch[0].a,
-                b: batch[0].b,
-            }
-        });
-    }
 }
 
-// Handle uncaught exceptions in the worker
 self.onerror = function (message, source, lineno, colno, error) {
     console.error("[Worker] Uncaught error:", message, "at", source, lineno, colno, error);
     self.postMessage({ type: 'worker_error', data: { error: `Uncaught: ${message}`, source: source, lineno: lineno } });
@@ -221,5 +204,4 @@ self.onerror = function (message, source, lineno, colno, error) {
 };
 
 console.log('[Worker] Worker script loaded and initialized.');
-// Signal main thread that worker script is ready
 self.postMessage({ type: 'worker_script_ready' });
