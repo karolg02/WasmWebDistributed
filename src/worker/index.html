@@ -3,295 +3,160 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>worker</title>
+    <title>Worker Host Page</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+        }
+    </style>
+    <!-- Add Socket.IO client library -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 
 <body>
-</body>
-<script src="benchmark/benchmark.js"></script>
-<script>
-    const socket = io(`http://${window.location.hostname}:8080/worker`);
+    <h1>Web Worker Computation System</h1>
+    <p>The computation is being handled by a Web Worker in the background. Communication with server is on the main
+        thread.</p>
+    <div id="status">
+        <p>Worker status: Initializing...</p>
+    </div>
 
-    let score;
-    let latency;
-    const clientModules = new Map();
+    <script>
+        if (window.Worker) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<p>Main thread: Loading worker script...</p>';
 
-    function initializeWorker() {
-        socket.on("task_batch", async (batch) => {
-            const taskData = batch[0];
-            const clientId = taskData.clientId;
-            const sanitizedId = taskData.sanitizedId;
-            let moduleToUse = null;
+            const myWorker = new Worker('worker.js');
+            let socket;
+            let latency;
+            let benchmarkScore;
 
-            moduleToUse = clientModules.get(clientId);
+            function initializeMainConnection() {
+                // Socket.IO connection setup
+                socket = io(`http://${window.location.hostname}:8080/worker`);
 
-            if (!moduleToUse) {
-                moduleToUse = await loadClientModule(clientId, sanitizedId);
+                socket.on("connect", () => {
+                    statusDiv.innerHTML = '<p>Main thread: Connected to server. Measuring latency...</p>';
+                    console.log('[Main] Connected to server.');
+                    const pingStart = performance.now();
+                    socket.emit("ping_resultSocket");
+
+                    socket.on("pong_resultSocket", () => {
+                        latency = (performance.now() - pingStart).toFixed(2);
+                        statusDiv.innerHTML = `<p>Main thread: Latency measured: ${latency}ms. Requesting benchmark from worker...</p>`;
+                        console.log(`[Main] Latency: ${latency}ms. Requesting benchmark from worker.`);
+                        myWorker.postMessage({ type: 'run_benchmark' });
+                    });
+                });
+
+                socket.on("task_batch", (batch) => {
+                    console.log('[Main] Received task_batch from server, sending to worker.');
+                    myWorker.postMessage({ type: 'task_batch', data: batch });
+                });
+
+                socket.on("custom_wasm_available", (data) => {
+                    console.log('[Main] Received custom_wasm_available from server, sending to worker.');
+                    myWorker.postMessage({ type: 'custom_wasm_available', data: data });
+                });
+
+                socket.on("unload_custom_wasm", (data) => {
+                    console.log('[Main] Received unload_custom_wasm from server, sending to worker.');
+                    myWorker.postMessage({ type: 'unload_custom_wasm', data: data });
+                });
+
+                socket.on("connect_error", (err) => {
+                    console.error("[Main] Connection Error:", err.message);
+                    statusDiv.innerHTML = `<p style="color: red;">Main thread: Connection error - ${err.message}</p>`;
+                });
+
+                socket.on("disconnect", (reason) => {
+                    console.log(`[Main] Disconnected from server: ${reason}`);
+                    statusDiv.innerHTML = `<p style="color: orange;">Main thread: Disconnected - ${reason}</p>`;
+                });
             }
 
-            const testStart = performance.now();
-            if (taskData.method === 'montecarlo') {
-                moduleToUse.ccall(
-                    "monte_carlo", "number",
-                    ["number", "number", "number", "number"],
-                    [taskData.a, taskData.b, taskData.samples, 0]
-                );
-            } else {
-                moduleToUse.ccall(
-                    "add", "number",
-                    ["number", "number", "number"],
-                    [taskData.a, taskData.b, taskData.dx]
-                );
-            }
-            const testDuration = performance.now() - testStart;
 
-            const params = calculateProcessingParams(batch);
-            if (testDuration > 200 && params.chunkSize > 1) {
-                console.log("[Worker] Single task test duration high, reducing chunk size.");
-                params.chunkSize = Math.max(1, Math.floor(params.chunkSize / 2));
-            }
-            processBatchTimeboxed(batch, params, moduleToUse);
-        });
+            myWorker.onmessage = function (e) {
+                console.log('[Main] Message received from worker:', e.data);
+                const message = e.data;
 
-        socket.emit("worker_ready");
-    }
-
-
-    BenchmarkModule().then(benchmark => {
-        const t0 = performance.now();
-        benchmark.ccall("benchmark");
-        const t1 = performance.now();
-        score = (1 / Math.max(0.01, (t1 - t0))).toFixed(4) * 1000;
-
-        socket.on("connect", () => {
-            const pingStart = performance.now();
-            socket.emit("ping_resultSocket");
-
-            socket.on("pong_resultSocket", () => {
-                latency = (performance.now() - pingStart).toFixed(2);
-                const workerInfo = {
-                    system: {
-                        platform: navigator.platform,
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        hardwareConcurrency: navigator.hardwareConcurrency,
-                        deviceMemory: navigator.deviceMemory || 'unknown'
-                    },
-                    performance: {
-                        benchmarkScore: parseFloat(score.toFixed(2)),
-                        latency: parseFloat(latency)
-                    }
-                };
-                socket.emit("register", workerInfo);
-                initializeWorker();
-            });
-        });
-    });
-
-    socket.on("custom_wasm_available", async (data) => {
-        const { clientId, sanitizedId, timestamp } = data;
-        unloadClientModule(clientId);
-        await loadClientModule(clientId, sanitizedId);
-    });
-
-    socket.on("unload_custom_wasm", (data) => {
-        const { clientId } = data;
-        unloadClientModule(clientId);
-    });
-
-    async function loadClientModule(clientId, sanitizedId) {
-        if (clientModules.has(clientId)) {
-            return clientModules.get(clientId);
-        }
-        const script = document.createElement('script');
-        script.src = `./temp/${clientId}.js?v=${Date.now()}`;
-        script.id = `module-script-${clientId}`;
-        script.async = true;
-
-        const moduleInstance = await new Promise((resolve, reject) => {
-            script.onload = async () => {
-                const moduleFunctionName = `Module_${sanitizedId}`;
-                if (typeof window[moduleFunctionName] === 'function') {
-                    try {
-                        const moduleFactory = window[moduleFunctionName];
-                        const instance = await moduleFactory();
-                        resolve(instance);
-                    } catch (initError) {
-                        console.error(`[Worker] Error initializing module ${moduleFunctionName} for clientId ${clientId}:`, initError);
-                        reject(initError);
-                    }
-                } else {
-                    console.error(`[Worker] Module factory ${moduleFunctionName} not found or not a function for clientId ${clientId}. Available window keys starting with Module_:`, Object.keys(window).filter(k => k.startsWith("Module_")));
-                    reject(new Error(`Module factory ${moduleFunctionName} not found.`));
+                switch (message.type) {
+                    case 'worker_script_ready':
+                        statusDiv.innerHTML = '<p>Main thread: Worker script ready. Connecting to server...</p>';
+                        console.log('[Main] Worker script is ready. Initializing main connection.');
+                        initializeMainConnection(); // Now connect to socket
+                        break;
+                    case 'benchmark_result':
+                        benchmarkScore = message.score;
+                        statusDiv.innerHTML = `<p>Main thread: Benchmark from worker: ${benchmarkScore}. Registering...</p>`;
+                        console.log(`[Main] Benchmark score from worker: ${benchmarkScore}. Registering with server.`);
+                        const workerInfo = {
+                            system: {
+                                platform: navigator.platform,
+                                userAgent: navigator.userAgent,
+                                language: navigator.language,
+                                hardwareConcurrency: navigator.hardwareConcurrency,
+                                deviceMemory: navigator.deviceMemory || 'unknown'
+                            },
+                            performance: {
+                                benchmarkScore: parseFloat(parseFloat(benchmarkScore).toFixed(2)),
+                                latency: parseFloat(latency)
+                            }
+                        };
+                        socket.emit("register", workerInfo);
+                        // After registration, the server should start sending tasks if any.
+                        // We can also emit a "worker_ready" from main thread if server expects it after registration.
+                        // For now, assume server sends tasks upon successful registration.
+                        statusDiv.innerHTML = `<p>Main thread: Registered. Worker ready for tasks.</p>`;
+                        break;
+                    case 'batch_result':
+                        console.log('[Main] Received batch_result from worker, sending to server.');
+                        socket.emit("batch_result", message.data);
+                        break;
+                    case 'task_error':
+                        console.error('[Main] Received task_error from worker, sending to server.');
+                        socket.emit("task_error", message.data);
+                        break;
+                    case 'worker_error': // General errors from worker logic (e.g. module load failure)
+                        console.error('[Main] Received worker_error from worker, sending to server (if applicable) or logging.');
+                        // Depending on the error, you might want to inform the server
+                        if (message.data.clientId) { // If error is related to a specific client's task/module
+                            socket.emit("worker_error", message.data);
+                        }
+                        statusDiv.innerHTML = `<p style="color: red;">Worker reported error: ${message.data.error}</p>`;
+                        break;
+                    case 'custom_module_loaded':
+                        console.log('[Main] Worker confirmed custom module loaded.');
+                        socket.emit("custom_module_loaded", message.data); // Inform server
+                        break;
+                    default:
+                        console.log('[Main] Received unhandled message type from worker:', message.type);
                 }
             };
-            document.body.appendChild(script);
-        });
 
-        clientModules.set(clientId, moduleInstance);
-        socket.emit("custom_module_loaded", { clientId });
-        return moduleInstance;
-    }
+            myWorker.onerror = function (e) {
+                console.error('[Main] Error from worker:', e.message, 'at', e.filename, ':', e.lineno);
+                statusDiv.innerHTML = `<p style="color: red;">Main thread: Worker error - ${e.message}</p>`;
+                // Terminate worker and perhaps try to restart or notify server.
+                // myWorker.terminate();
+            };
 
-    function unloadClientModule(clientId) {
-        if (clientModules.has(clientId)) {
-            clientModules.delete(clientId);
-            const scriptTag = document.getElementById(`module-script-${clientId}`);
-            if (scriptTag && document.body.contains(scriptTag)) {
-                document.body.removeChild(scriptTag);
-            }
-        }
-    }
+            // Initial status update, actual "Worker started" will be based on message from worker
+            statusDiv.innerHTML = '<p>Main thread: Worker instance created. Waiting for worker script to be ready...</p>';
 
-    async function processBatchTimeboxed(batch, params, moduleInstance) {
-        if (!moduleInstance || typeof moduleInstance.ccall !== 'function') {
-            console.error("[Worker] processBatchTimeboxed called without a valid moduleInstance or ccall is missing.");
-            const firstTask = batch[0];
-            if (firstTask && firstTask.clientId) {
-                socket.emit("worker_error", { clientId: firstTask.clientId, error: "Processing attempted without a valid loaded module." });
-            }
-            return;
-        }
-        const method = batch[0].method;
-        const clientId = batch[0].clientId;
-
-        let currentIndex = 0;
-        let batchSum = 0;
-        let taskCount = 0;
-        let firstTaskId = batch[0].taskId;
-        let totalProcessed = 0;
-        const totalTasks = batch.length;
-        const safeExecutionTime = params.maxExecutionTime || 200;
-
-        while (currentIndex < batch.length) {
-            const startChunkIndex = currentIndex;
-            const endIndex = Math.min(currentIndex + (params.chunkSize || 10), batch.length);
-            const chunkStartTime = performance.now();
-            let tasksProcessedInThisChunk = 0;
-
-            for (let i = currentIndex; i < endIndex; i++) {
-                const data = batch[i];
-                let result;
-
-                if (data.method === 'montecarlo') {
-                    const seedOffset = data.seedOffset || 0;
-                    result = moduleInstance.ccall(
-                        "monte_carlo", "number",
-                        ["number", "number", "number", "number"],
-                        [data.a, data.b, data.samples, seedOffset]
-                    );
-                } else {
-                    result = moduleInstance.ccall(
-                        "add", "number",
-                        ["number", "number", "number"],
-                        [data.a, data.b, data.dx]
-                    );
-                }
-
-                batchSum += result;
-                taskCount++;
-                tasksProcessedInThisChunk++;
-                totalProcessed++;
-                // const currentTime = performance.now();
-                // // if (currentTime - chunkStartTime > safeExecutionTime) {
-                // //     console.warn(`[Worker] Chunk execution time limit (${safeExecutionTime}ms) exceeded for clientId ${clientId}. Processed ${tasksProcessedInThisChunk} in this chunk.`);
-                // //     break;
-                // // }
-            }
-
-            currentIndex = startChunkIndex + tasksProcessedInThisChunk;
-
-            if (taskCount >= (params.reportEvery || 1) || currentIndex >= batch.length || tasksProcessedInThisChunk === 0 && taskCount > 0) {
-                if (taskCount > 0) {
-                    socket.emit("batch_result", {
-                        batchId: firstTaskId,
-                        clientId: clientId,
-                        result: batchSum,
-                        tasksCount: taskCount,
-                        method: method,
-                        a: batch[0].a,
-                        b: batch[0].b,
-                    });
-                    batchSum = 0;
-                    taskCount = 0;
-                    if (currentIndex < batch.length && batch[currentIndex]) {
-                        firstTaskId = batch[currentIndex].taskId;
-                    }
-                }
-            }
-
-            if (tasksProcessedInThisChunk === 0 && currentIndex < batch.length) {
-                currentIndex++;
-            }
-
-            if (currentIndex < batch.length) {
-                await new Promise(resolve => setTimeout(resolve, params.pauseTime || 10)); // Default if params faulty
-            }
-        }
-    }
-
-    function getDevicePerformanceRating() {
-        const maxExpectedScore = 1000;
-        const minExpectedScore = 10;
-
-        const currentScore = typeof score === 'number' ? score : minExpectedScore;
-        let normalized = (currentScore - minExpectedScore) / (maxExpectedScore - minExpectedScore);
-        normalized = Math.max(0, Math.min(1, normalized));
-        return normalized;
-    }
-
-    function assessTaskComplexity(task) {
-        if (!task) return 1;
-        if (task.method === 'montecarlo') {
-            return Math.log10(Math.max(1, task.samples || 10000));
         } else {
-            const a = typeof task.a === 'number' ? task.a : 0;
-            const b = typeof task.b === 'number' ? task.b : 1;
-            const dx = typeof task.dx === 'number' && task.dx !== 0 ? task.dx : 0.001;
-            const steps = Math.abs((b - a) / dx);
-            return Math.log10(Math.max(1, steps));
+            document.body.innerHTML = '<h1>Web Workers Not Supported</h1><p>Your browser does not support Web Workers, which are required for this application to run.</p>';
+            console.error('[Main] Web Workers are not supported in this browser.');
         }
-    }
-
-    function calculateProcessingParams(batch) {
-        if (!batch || batch.length === 0) return { chunkSize: 10, pauseTime: 50, reportEvery: 10, maxExecutionTime: 200 }; // Default safe params
-        const complexity = assessTaskComplexity(batch[0]);
-        const devicePerformance = getDevicePerformanceRating();
-        const performanceMultiplier = 0.5 + devicePerformance;
-
-        let chunkSize, pauseTime, reportEvery, maxExecutionTime;
-
-        if (complexity > 7) { //przejebane
-            chunkSize = Math.max(1, Math.floor(2 * performanceMultiplier));
-            pauseTime = Math.round(200 / performanceMultiplier);
-            reportEvery = chunkSize;
-            maxExecutionTime = Math.round(100 * performanceMultiplier);
-        } else if (complexity > 5) { // trudne
-            chunkSize = Math.max(1, Math.floor(5 * performanceMultiplier));
-            pauseTime = Math.round(100 / performanceMultiplier);
-            reportEvery = chunkSize;
-            maxExecutionTime = Math.round(150 * performanceMultiplier);
-        } else if (complexity > 3) { // srednie
-            chunkSize = Math.max(5, Math.floor(15 * performanceMultiplier));
-            pauseTime = Math.round(50 / performanceMultiplier);
-            reportEvery = Math.max(1, Math.floor(chunkSize / 2));
-            maxExecutionTime = Math.round(250 * performanceMultiplier);
-        } else { // latwiutkie
-            chunkSize = Math.max(10, Math.floor(30 * performanceMultiplier));
-            pauseTime = Math.round(20 / performanceMultiplier);
-            reportEvery = chunkSize;
-            maxExecutionTime = Math.round(400 * performanceMultiplier);
-        }
-
-        chunkSize = Math.max(1, Math.min(chunkSize, 100));
-        pauseTime = Math.max(10, pauseTime);
-        reportEvery = Math.max(1, reportEvery);
-        maxExecutionTime = Math.max(50, maxExecutionTime);
-
-        return { chunkSize, pauseTime, reportEvery, maxExecutionTime };
-    }
-
-</script>
+    </script>
+</body>
 
 </html>
