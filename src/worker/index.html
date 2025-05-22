@@ -3,77 +3,139 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Worker</title>
+    <title>Worker Configuration</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 10px;
+        }
+
+        #controls,
+        #status {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid black;
+            border-radius: 5px;
+        }
+
+        #status {
+            background-color: #cfcaca;
+            white-space: pre-line;
+        }
+
+        label {
+            margin-right: 10px;
+        }
+    </style>
 </head>
 
 <body>
-    Workeruje
+    <h1>Web Worker Configuration</h1>
+    <div id="controls" style="font-size: large;">
+        <label for="workerCount">Ilu workerów użyć (max: <span id="maxWorkers"></span>):</label>
+        <input type="number" id="workerCount" min="1" value="1">
+        <button id="initializeButton">Zatwierdź i przeprowadź benchmark</button>
+    </div>
+    <div id="status">Konsola:</div>
+
     <script>
         if (window.Worker) {
-            const myWorker = new Worker('worker.js');
+            const statusDiv = document.getElementById('status');
+            const workerCountInput = document.getElementById('workerCount');
+            const initializeButton = document.getElementById('initializeButton');
+            const maxWorkersSpan = document.getElementById('maxWorkers');
+            const maxHardwareConcurrency = navigator.hardwareConcurrency || 1;
+            maxWorkersSpan.textContent = maxHardwareConcurrency;
+            workerCountInput.max = maxHardwareConcurrency;
+            workerCountInput.value = 1;
+
+            let workerPool = [];
+            let benchmarkResults = [];
+            let workersReadyCount = 0;
+            let benchmarksDoneCount = 0;
+            let actualNumWorkers = 0;
+
             let socket;
-            let latency;
-            let benchmarkScore;
+            let mainLatency;
 
-            function initializeMainConnection() {
-                socket = io(`http://${window.location.hostname}:8080/worker`);
+            initializeButton.onclick = function () {
+                actualNumWorkers = parseInt(workerCountInput.value, 10);
+                if (isNaN(actualNumWorkers) || actualNumWorkers < 1 || actualNumWorkers > maxHardwareConcurrency) {
+                    statusDiv.textContent = `Niepoprawna liczba workerów, wybierz pomiędzy 1-${maxHardwareConcurrency}.`;
+                    return;
+                }
 
-                socket.on("connect", () => {
-                    const pingStart = performance.now();
-                    socket.emit("ping_resultSocket");
+                initializeButton.disabled = true;
+                workerCountInput.disabled = true;
 
-                    socket.on("pong_resultSocket", () => {
-                        latency = (performance.now() - pingStart).toFixed(2);
-                        myWorker.postMessage({ type: 'run_benchmark' });
-                    });
-                });
+                workerPool.forEach(worker => worker.terminate());
+                workerPool = [];
+                benchmarkResults = [];
+                workersReadyCount = 0;
+                benchmarksDoneCount = 0;
 
-                socket.on("task_batch", (batch) => {
-                    myWorker.postMessage({ type: 'task_batch', data: batch });
-                });
+                for (let i = 0; i < actualNumWorkers; i++) {
+                    const worker = new Worker('worker.js');
+                    worker.id = i;
 
-                socket.on("custom_wasm_available", (data) => {
-                    myWorker.postMessage({ type: 'custom_wasm_available', data: data });
-                });
+                    worker.onmessage = function (e) {
+                        const message = e.data;
+                        handleWorkerMessage(message, worker.id);
+                    };
 
-                socket.on("unload_custom_wasm", (data) => {
-                    myWorker.postMessage({ type: 'unload_custom_wasm', data: data });
-                });
-
-                socket.on("connect_error", (err) => {
-                    console.error("[Main] Connection Error:", err.message);
-                });
-
-                socket.on("disconnect", (reason) => {
-                    console.log(`[Main] Disconnected from server: ${reason}`);
-                });
-            }
+                    worker.onerror = function (e) {
+                        statusDiv.textContent += `\nError od workera: ${worker.id} - ${e.message}`;
+                    };
+                    workerPool.push(worker);
+                }
+            };
 
 
-            myWorker.onmessage = function (e) {
-                const message = e.data;
-
+            function handleWorkerMessage(message, workerId) {
                 switch (message.type) {
                     case 'worker_script_ready':
-                        initializeMainConnection();
+                        workersReadyCount++;
+                        if (workersReadyCount === actualNumWorkers) {
+                            initializeMainConnection();
+                        }
                         break;
                     case 'benchmark_result':
-                        benchmarkScore = message.score;
-                        const workerInfo = {
-                            system: {
-                                platform: navigator.platform,
-                                userAgent: navigator.userAgent,
-                                language: navigator.language,
-                                hardwareConcurrency: navigator.hardwareConcurrency,
-                                deviceMemory: navigator.deviceMemory || 'unknown'
-                            },
-                            performance: {
-                                benchmarkScore: parseFloat(parseFloat(benchmarkScore).toFixed(2)),
-                                latency: parseFloat(latency)
-                            }
-                        };
-                        socket.emit("register", workerInfo);
+                        benchmarksDoneCount++;
+                        benchmarkResults.push({
+                            score: message.error ? 0 : parseFloat(message.score),
+                            error: message.error
+                        });
+
+                        if (benchmarksDoneCount === actualNumWorkers) {
+                            let totalScore = 0;
+                            let validScoresCount = 0;
+                            benchmarkResults.forEach(res => {
+                                if (!res.error) {
+                                    totalScore += res.score;
+                                    validScoresCount++;
+                                }
+                            });
+                            const averageBenchmarkScore = validScoresCount > 0 ? (totalScore / validScoresCount) : 0;
+                            statusDiv.textContent += `\nTesty wydajnościowe zakończone. Avg: ${averageBenchmarkScore.toFixed(2)}`;
+
+                            const workerInfo = {
+                                system: {
+                                    platform: navigator.platform,
+                                    userAgent: navigator.userAgent,
+                                    language: navigator.language,
+                                    hardwareConcurrency: maxHardwareConcurrency,
+                                    actualWorkersUsed: actualNumWorkers,
+                                    deviceMemory: navigator.deviceMemory || 'unknown'
+                                },
+                                performance: {
+                                    benchmarkScore: parseFloat(averageBenchmarkScore.toFixed(2)),
+                                    latency: parseFloat(mainLatency)
+                                }
+                            };
+                            socket.emit("register", workerInfo);
+                            statusDiv.textContent += `\nZarejestrowano workerów na serwerze. Czekam na zadania...`;
+                        }
                         break;
                     case 'batch_progress':
                         const progressDataForServer = {
@@ -85,7 +147,6 @@
                             b: message.data.b,
                         };
                         socket.emit("batch_result", progressDataForServer);
-
                         break;
                     case 'task_error':
                         socket.emit("task_error", message.data);
@@ -94,21 +155,65 @@
                         if (message.data.clientId) {
                             socket.emit("worker_error", { clientId: message.data.clientId, error: message.data.error });
                         }
+                        statusDiv.textContent += `\nWorker ${workerId} zarejestrował error: ${message.data.error}`;
                         break;
                     case 'custom_module_loaded':
-                        socket.emit("custom_module_loaded", message.data);
+                        socket.emit("custom_module_loaded", { clientId: message.data.clientId });
                         break;
-                    default:
-                        console.log('[Main] Received unhandled message type from worker:', message.type);
                 }
-            };
+            }
 
-            myWorker.onerror = function (e) {
-                console.error('[Main] Error from worker:', e.message, 'at', e.filename, ':', e.lineno);
-            };
+            function initializeMainConnection() {
+                socket = io(`http://${window.location.hostname}:8080/worker`);
+
+                socket.on("connect", () => {
+                    statusDiv.textContent += '\nPołączono z serwerem. Mierzenie opóźnienia...';
+                    const pingStart = performance.now();
+                    socket.emit("ping_resultSocket");
+
+                    socket.on("pong_resultSocket", () => {
+                        mainLatency = (performance.now() - pingStart).toFixed(2);
+                        statusDiv.textContent += `\nOpóźnienie: ${mainLatency}ms. Rozpoczęcie benchmarków...`;
+                        workerPool.forEach(worker => {
+                            worker.postMessage({ type: 'run_benchmark' });
+                        });
+                    });
+                });
+
+                let nextWorkerIndex = 0;
+                socket.on("task_batch", (batch) => {
+                    if (workerPool.length > 0) {
+                        const targetWorker = workerPool[nextWorkerIndex % workerPool.length];
+                        targetWorker.postMessage({ type: 'task_batch', data: batch });
+                        nextWorkerIndex++;
+                    }
+                });
+
+                socket.on("custom_wasm_available", (data) => {
+                    statusDiv.textContent += `\nWczytuje WASM dla ${data.clientId}`;
+                    workerPool.forEach(worker => {
+                        worker.postMessage({ type: 'custom_wasm_available', data: data });
+                    });
+                });
+
+                socket.on("unload_custom_wasm", (data) => {
+                    workerPool.forEach(worker => {
+                        worker.postMessage({ type: 'unload_custom_wasm', data: data });
+                    });
+                });
+
+                socket.on("connect_error", (err) => {
+                    console.error("[Main] Connection Error:", err.message);
+                    statusDiv.textContent += `\nError w połączeniu - ${err.message}`;
+                });
+
+                socket.on("disconnect", (reason) => {
+                    statusDiv.textContent += `\nOdłączono od serwera - ${reason}`;
+                });
+            }
 
         } else {
-            console.error('[Main] Web Workers are not supported in this browser.');
+            document.body.innerHTML = '<h1>Przeglądarka nie obsługuje Web Workerów</h1>';
         }
     </script>
 </body>
