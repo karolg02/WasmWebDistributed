@@ -12,7 +12,7 @@ import {
     Card
 } from "@mantine/core";
 import { IconCalculator, IconPlayerPlay, IconFunction, IconAlertTriangle, IconCheck } from "@tabler/icons-react";
-import { TaskParams } from "../types";
+import { TaskParams } from "../../types";
 
 interface MonteCarloFormProps {
     taskParams: TaskParams;

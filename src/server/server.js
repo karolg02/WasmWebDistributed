@@ -338,7 +338,7 @@ async function start() {
                     start: 0,
                     lastUpdate: 0,
                     method: taskParams.method,
-                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.samples : null // Corrected: use samples for Monte Carlo
+                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.samples : null
                 });
 
                 await tasksDevider3000(tasks, clientId, selected, taskParams);

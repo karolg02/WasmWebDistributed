@@ -12,7 +12,7 @@ interface ResultsPanelProps {
     result: number | null;
     duration: number | null;
     tasksPerSecond: number | null;
-    method?: 'trapezoidal' | 'montecarlo';
+    method?: 'trapezoidal' | 'montecarlo' | 'custom';
 }
 
 export const ResultsPanel: React.FC<ResultsPanelProps> = ({
