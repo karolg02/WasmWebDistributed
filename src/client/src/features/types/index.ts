@@ -10,6 +10,18 @@ export interface TaskParams {
     sanitizedId?: string;
 }
 
+export interface CustomParams1D {
+    method: 'custom';
+    x1: number;
+    x2: number;
+    dx: number;
+    N: number;
+    wasmSource: string; // Renamed from customFunction
+    sanitizedId?: string;
+}
+
+export type AllTaskParams = TaskParams | CustomParams1D;
+
 export interface Progress {
     done: number;
     elapsedTime: number;

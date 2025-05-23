@@ -124,7 +124,7 @@
                                     platform: navigator.platform,
                                     userAgent: navigator.userAgent,
                                     language: navigator.language,
-                                    hardwareConcurrency: maxHardwareConcurrency,
+                                    hardwareConcurrency: workerCountInput.value,
                                     actualWorkersUsed: actualNumWorkers,
                                     deviceMemory: navigator.deviceMemory || 'unknown'
                                 },

@@ -2,22 +2,39 @@ import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Container, Paper, Title, Text, SimpleGrid, Group, Badge, Alert } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
-import { TaskParams } from "../types";
-import { IntegrationTaskForm } from "../components/TrapezMethod";
-import { MonteCarloForm } from "../components/MonteCarloForm";
+import { AllTaskParams, CustomParams1D, TaskParams } from "../types";
+import { IntegrationTaskForm } from "../components/methods/TrapezMethod";
+import { MonteCarloForm } from "../components/methods/MonteCarloForm";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkerCard } from "../components/WorkerCard";
 import { IconAlertTriangle } from "@tabler/icons-react";
+import { CustomForm } from "../components/methods/CustomForm";
 
 export function TasksPanel() {
     const location = useLocation();
-    const initialMethod = location.state?.method === 'montecarlo' ? 'montecarlo' : 'trapezoidal';
-    const [currentMethod] = useState<'trapezoidal' | 'montecarlo'>(initialMethod);
+    const initialMethod =
+        location.state?.method === 'montecarlo'
+            ? 'montecarlo'
+            : location.state?.method === 'custom'
+                ? 'custom'
+                : 'trapezoidal';
+
+    const [currentMethod] = useState<'trapezoidal' | 'montecarlo' | 'custom'>(initialMethod);
+
     const [error, setError] = useState<string | null>(null);
 
     const {
         socket, workers, selectedWorkerIds, setSelectedWorkerIds, progress, result, duration, isCalculating, startTime, queueStatus, startTask, compilingFunction, functionCompilationResultDisplay
     } = useSocket();
+
+    const [customParams1D, setCustomParams1D] = useState<CustomParams1D>({
+        method: 'custom',
+        x1: 0,
+        x2: 1,
+        dx: 0.00001,
+        N: 100000,
+        wasmSource: "" // Renamed from customFunction
+    });
 
     const [trapezoidalTaskParams, setTrapezoidalTaskParams] = useState<TaskParams>({
         method: 'trapezoidal',
@@ -59,18 +76,41 @@ export function TasksPanel() {
                 return;
             }
             taskResult = await startTask(trapezoidalTaskParams, selectedWorkerIds);
-        } else {
+        } else if (currentMethod === "montecarlo") {
             if (!monteCarloTaskParams.customFunction || monteCarloTaskParams.customFunction.trim() === "") {
                 setError("Ciało funkcji dla metody Monte Carlo nie może być puste.");
                 return;
             }
             taskResult = await startTask(monteCarloTaskParams, selectedWorkerIds);
+        } else if (currentMethod === "custom") {
+            if (!customParams1D.wasmSource || customParams1D.wasmSource.trim() === "") {
+                setError("Kod WASM lub identyfikator funkcji dla metody własnej nie może być pusty.");
+                return;
+            }
+            // Assuming startTask can handle CustomParams1D.
+            // You might need to adjust startTask in useSocket.ts
+            taskResult = await startTask(customParams1D as AllTaskParams, selectedWorkerIds);
         }
 
         if (taskResult && !taskResult.success) {
             setError(taskResult.error || "Wystąpił błąd podczas uruchamiania zadania");
         }
     };
+
+    const getCurrentTaskParams = (): AllTaskParams => {
+        switch (currentMethod) {
+            case "trapezoidal":
+                return trapezoidalTaskParams;
+            case "montecarlo":
+                return monteCarloTaskParams;
+            case "custom":
+                return customParams1D;
+            default:
+                // Fallback, though currentMethod is typed and should match one of the cases
+                return trapezoidalTaskParams;
+        }
+    };
+
     return (
         <Container size="lg" py="xl">
             <Paper bg="dark.8">
@@ -87,21 +127,69 @@ export function TasksPanel() {
                     </Alert>
                 )}
 
-                {currentMethod === "trapezoidal" ? (
+                {/* This top-level conditional rendering of forms might need adjustment
+                    if you want a single form that changes dynamically.
+                    The IIFE below already handles this, so one of these might be redundant
+                    or could be refactored. For now, let's assume the IIFE is the primary one.
+                 */}
+                {/* {currentMethod === "trapezoidal" ? (
                     <IntegrationTaskForm
                         taskParams={trapezoidalTaskParams}
                         setTaskParams={setTrapezoidalTaskParams}
                         onSubmit={handleSubmit}
                         disabled={isCalculating || compilingFunction}
                         compilationResult={functionCompilationResultDisplay} />
-                ) : (
+                ) : currentMethod === "montecarlo" ? ( // Added currentMethod check
                     <MonteCarloForm
                         taskParams={monteCarloTaskParams}
                         setTaskParams={setMonteCarloTaskParams}
                         onSubmit={handleSubmit}
                         disabled={isCalculating || compilingFunction}
                         compilationResult={functionCompilationResultDisplay} />
-                )}
+                ) : ( // Assumes custom if not trapezoidal or montecarlo
+                    <CustomForm
+                        taskParams={customParams1D}
+                        setTaskParams={setCustomParams1D}
+                        onSubmit={handleSubmit}
+                        disabled={isCalculating || compilingFunction}
+                        // compilationResult={functionCompilationResultDisplay} // Decide if/how compilation feedback applies to custom WASM
+                    />
+                } */}
+
+                {(() => {
+                    switch (currentMethod) {
+                        case "trapezoidal":
+                            return (
+                                <IntegrationTaskForm
+                                    taskParams={trapezoidalTaskParams}
+                                    setTaskParams={setTrapezoidalTaskParams}
+                                    onSubmit={handleSubmit}
+                                    disabled={isCalculating || compilingFunction}
+                                    compilationResult={functionCompilationResultDisplay}
+                                />
+                            );
+                        case "montecarlo":
+                            return (
+                                <MonteCarloForm
+                                    taskParams={monteCarloTaskParams}
+                                    setTaskParams={setMonteCarloTaskParams}
+                                    onSubmit={handleSubmit}
+                                    disabled={isCalculating || compilingFunction}
+                                    compilationResult={functionCompilationResultDisplay}
+                                />
+                            );
+                        case "custom":
+                            return (
+                                <CustomForm
+                                    taskParams={customParams1D}
+                                    setTaskParams={setCustomParams1D}
+                                    onSubmit={handleSubmit}
+                                    disabled={isCalculating || compilingFunction}
+                                // compilationResult={functionCompilationResultDisplay} // Consider if this is needed for custom WASM
+                                />
+                            );
+                    }
+                })()}
 
                 <Title order={3} mt="lg" mb="sm" c="white">
                     <Group gap="xs">
@@ -144,7 +232,7 @@ export function TasksPanel() {
                 <ResultsPanel
                     isCalculating={isCalculating}
                     progress={progress}
-                    taskParams={currentMethod === "trapezoidal" ? trapezoidalTaskParams : monteCarloTaskParams}
+                    taskParams={getCurrentTaskParams()}
                     startTime={startTime}
                     result={result}
                     duration={duration}
