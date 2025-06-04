@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Transition, Center } from "@mantine/core";
 import { IconClockHour4, IconCheck, IconCalculator, IconHourglass } from "@tabler/icons-react";
-import { Progress as ProgressType, TaskParams } from "../types";
+import { Progress as ProgressType } from "../types";
 import { formatTime } from "../utils/formatTime";
 
 interface ResultsPanelProps {
     isCalculating: boolean;
     progress: ProgressType;
-    taskParams: TaskParams | any;
+    taskParams: any;
     startTime: number | null;
     result: number | null;
     duration: number | null;
     tasksPerSecond: number | null;
-    method?: 'trapezoidal' | 'montecarlo' | 'custom';
+    method?: 'custom1D' | 'custom2D';
 }
 
 export const ResultsPanel: React.FC<ResultsPanelProps> = ({
@@ -56,18 +56,15 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         const elapsedTime = getCurrentElapsedTime();
         if (!isCalculating || !elapsedTime || elapsedTime < 1) return null;
 
-        if (method === 'montecarlo') {
-            const percentComplete = progress.done / taskParams.N;
-            if (percentComplete <= 0 || percentComplete > 0.99) return null;
-            const estimatedTotalTime = elapsedTime / percentComplete;
-            return Math.max(0, estimatedTotalTime - elapsedTime);
-        } else {
-            const currentTasksPerSecond = progress.done / elapsedTime;
-            if (currentTasksPerSecond <= 0) return null;
-            const remainingTasks = taskParams.N - progress.done;
-            const effectiveRate = tasksPerSecond && tasksPerSecond > 0 ? tasksPerSecond : currentTasksPerSecond;
-            return remainingTasks / effectiveRate;
-        }
+        const percentComplete = progress.done / taskParams.N;
+        if (percentComplete <= 0 || percentComplete > 0.99) return null;
+
+        const currentTasksPerSecond = progress.done / elapsedTime;
+        if (currentTasksPerSecond <= 0) return null;
+
+        const remainingTasks = taskParams.N - progress.done;
+        const effectiveRate = tasksPerSecond && tasksPerSecond > 0 ? tasksPerSecond : currentTasksPerSecond;
+        return remainingTasks / effectiveRate;
     };
 
     const formatDuration = (value: any) => {
@@ -79,13 +76,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     };
 
     const getProgressText = () => {
-        if (method === 'montecarlo') {
-            const doneSamples = progress.done * taskParams.samples;
-            const totalSamples = taskParams.N * taskParams.samples;
-            return `Postęp: ${doneSamples.toLocaleString()} / ${totalSamples.toLocaleString()} próbek`;
-        } else {
-            return `Postęp: ${progress.done} / ${taskParams.N} zadań`;
-        }
+        return `Postęp: ${progress.done} / ${taskParams.N} zadań`;
     };
 
     const getElapsedTimeText = () => {
@@ -133,7 +124,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                             />
 
                             <Group justify="space-between" align="center">
-
                                 <Text size="md" c="dimmed">
                                     <IconClockHour4 size={14} color="#5C5F66" style={{ marginRight: "4px" }} />
                                     Czas wykonywania: {getElapsedTimeText()}

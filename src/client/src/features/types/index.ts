@@ -1,26 +1,27 @@
-export interface TaskParams {
-    method: 'trapezoidal' | 'montecarlo';
-    a: number;
-    b: number;
-    dx?: number;
-    N: number;
-    samples?: number;
-    y_max?: number;
-    customFunction: string;
-    sanitizedId?: string;
-}
-
 export interface CustomParams1D {
-    method: 'custom';
+    method: 'custom1D';
     x1: number;
     x2: number;
     dx: number;
     N: number;
-    wasmSource: string; // Renamed from customFunction
+    wasmSource: string;
     sanitizedId?: string;
 }
 
-export type AllTaskParams = TaskParams | CustomParams1D;
+export interface CustomParams2D {
+    method: 'custom2D';
+    x1: number;
+    x2: number;
+    y1: number;
+    y2: number;
+    dx: number;
+    dy: number;
+    N: number;
+    wasmSource: string;
+    sanitizedId?: string;
+}
+
+export type AllTaskParams = CustomParams1D | CustomParams2D;
 
 export interface Progress {
     done: number;
