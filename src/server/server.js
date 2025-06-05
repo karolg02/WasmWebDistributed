@@ -52,25 +52,8 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-function cleanupClientFiles(clientId, tempDir) {
-    const sanitizedId = sanitizeJsIdentifier(clientId);
-    const filesToRemove = [
-        path.join(tempDir, `${sanitizedId}.js`),
-        path.join(tempDir, `${sanitizedId}.wasm`)
-    ];
-
-    filesToRemove.forEach(file => {
-        if (fs.existsSync(file)) {
-            fs.unlinkSync(file);
-            console.log(`[Server] Removed file: ${file}`);
-        }
-    });
-}
-
-// do uploadu plikow WASM
 app.post('/upload-wasm', upload.fields([
-    { name: 'wasmFile', maxCount: 1 },
-    { name: 'jsFile', maxCount: 1 }
+    { name: 'wasmFile', maxCount: 1 }
 ]), (req, res) => {
     try {
         const { clientId, method } = req.body;
@@ -84,44 +67,40 @@ app.post('/upload-wasm', upload.fields([
 
         const sanitizedId = sanitizeJsIdentifier(clientId);
 
-        if (!req.files || !req.files['wasmFile'] || !req.files['jsFile']) {
+        if (!req.files || !req.files['wasmFile']) {
             return res.json({
                 success: false,
-                error: "Brak wymaganych plików WASM lub JS"
+                error: "Brak wymaganego pliku WASM"
             });
         }
 
-        // Pobierz tymczasowe ścieżki plików
+        // Pobierz tymczasową ścieżkę pliku WASM
         const wasmTempFile = req.files['wasmFile'][0];
-        const jsTempFile = req.files['jsFile'][0];
 
-        // Docelowe ścieżki z poprawną nazwą
+        // Docelowa ścieżka z poprawną nazwą
         const wasmPath = path.join(tempDir, `${sanitizedId}.wasm`);
-        const jsPath = path.join(tempDir, `${sanitizedId}.js`);
 
-        // Przenieś pliki z tymczasowych nazw na docelowe
+        // Przenieś plik z tymczasowej nazwy na docelową
         try {
             fs.renameSync(wasmTempFile.path, wasmPath);
-            fs.renameSync(jsTempFile.path, jsPath);
         } catch (renameError) {
-            console.error('[Server] Error renaming files:', renameError);
+            console.error('[Server] Error renaming WASM file:', renameError);
             return res.json({
                 success: false,
-                error: "Błąd podczas zapisywania plików"
+                error: "Błąd podczas zapisywania pliku WASM"
             });
         }
 
-        // Sprawdź czy pliki zostały zapisane
-        if (!fs.existsSync(wasmPath) || !fs.existsSync(jsPath)) {
+        // Sprawdź czy plik został zapisany
+        if (!fs.existsSync(wasmPath)) {
             return res.json({
                 success: false,
-                error: "Błąd podczas zapisywania plików"
+                error: "Błąd podczas zapisywania pliku WASM"
             });
         }
 
-        console.log(`[Server] Files uploaded successfully for client ${clientId}:`);
+        console.log(`[Server] WASM file uploaded successfully for client ${clientId}:`);
         console.log(`[Server] WASM: ${wasmPath}`);
-        console.log(`[Server] JS: ${jsPath}`);
 
         activeCustomFunctions.set(clientId, {
             active: true,
@@ -137,7 +116,7 @@ app.post('/upload-wasm', upload.fields([
 
         res.json({
             success: true,
-            message: "Pliki przesłane pomyślnie",
+            message: "Plik WASM przesłany pomyślnie",
             sanitizedId: sanitizedId
         });
 
@@ -145,10 +124,20 @@ app.post('/upload-wasm', upload.fields([
         console.error('[Server] Upload error:', error);
         res.json({
             success: false,
-            error: "Błąd serwera podczas przetwarzania plików"
+            error: "Błąd serwera podczas przetwarzania pliku"
         });
     }
 });
+
+function cleanupClientFiles(clientId, tempDir) {
+    const sanitizedId = sanitizeJsIdentifier(clientId);
+    const wasmFile = path.join(tempDir, `${sanitizedId}.wasm`);
+
+    if (fs.existsSync(wasmFile)) {
+        fs.unlinkSync(wasmFile);
+        console.log(`[Server] Removed WASM file: ${wasmFile}`);
+    }
+}
 
 // Endpoint statyczny dla plików temp (aby worker mógł je pobrać)
 app.use('/temp', express.static(tempDir));

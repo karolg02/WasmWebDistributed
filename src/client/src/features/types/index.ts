@@ -4,7 +4,6 @@ export interface CustomParams1D {
     x2: number;
     dx: number;
     N: number;
-    wasmSource: string;
     sanitizedId?: string;
 }
 
@@ -17,7 +16,6 @@ export interface CustomParams2D {
     dx: number;
     dy: number;
     N: number;
-    wasmSource: string;
     sanitizedId?: string;
 }
 

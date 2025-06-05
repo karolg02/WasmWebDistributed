@@ -19,14 +19,13 @@ export const CustomForm: React.FC<CustomFormProps> = ({
     is2D
 }) => {
     const [wasmFile, setWasmFile] = useState<File | null>(null);
-    const [jsFile, setJsFile] = useState<File | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
 
     const handleFormSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!wasmFile || !jsFile) {
-            setUploadError("Musisz przesłać oba pliki: WASM i JS loader");
+        if (!wasmFile) {
+            setUploadError("Musisz przesłać plik WASM");
             return;
         }
 
@@ -35,17 +34,11 @@ export const CustomForm: React.FC<CustomFormProps> = ({
             return;
         }
 
-        if (!jsFile.name.endsWith('.js')) {
-            setUploadError("Plik JS musi mieć rozszerzenie .js");
-            return;
-        }
-
         setUploadError(null);
 
-        // Dodaj pliki do FormData
+        // Dodaj plik do FormData
         const formData = new FormData(e.target as HTMLFormElement);
         if (wasmFile) formData.set('wasmFile', wasmFile);
-        if (jsFile) formData.set('jsFile', jsFile);
 
         onSubmit(e);
     };
@@ -56,13 +49,6 @@ export const CustomForm: React.FC<CustomFormProps> = ({
 
     const handleWasmFileChange = (file: File | null) => {
         setWasmFile(file);
-        if (file) {
-            updateParams({ wasmSource: file.name });
-        }
-    };
-
-    const handleJsFileChange = (file: File | null) => {
-        setJsFile(file);
     };
 
     return (
@@ -87,13 +73,12 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         </Alert>
                     )}
 
-                    {/* Ukryte inputy dla FormData */}
+                    {/* Ukryty input dla FormData */}
                     <input type="hidden" name="wasmFile" />
-                    <input type="hidden" name="jsFile" />
 
                     <FileInput
                         label="Plik WASM"
-                        description="Przesyłany plik .wasm z skompilowaną funkcją"
+                        description="Przesyłany plik .wasm z skompilowaną funkcją 'main_function'"
                         placeholder="Wybierz plik .wasm"
                         accept=".wasm"
                         value={wasmFile}
@@ -103,22 +88,10 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         required
                     />
 
-                    <FileInput
-                        label="Plik JS Loader"
-                        description="Plik .js z loaderem do obsługi WASM"
-                        placeholder="Wybierz plik .js"
-                        accept=".js"
-                        value={jsFile}
-                        onChange={handleJsFileChange}
-                        leftSection={<IconUpload size={14} />}
-                        disabled={disabled}
-                        required
-                    />
-
                     <Text size="sm" c="dimmed">
-                        <strong>Wymagania dla pliku JS:</strong><br />
-                        - Musi eksportować moduł WASM zgodny z Emscripten<br />
-                        - Funkcje dostępne przez ccall: 'main_function'
+                        <strong>Wymagania dla pliku WASM:</strong><br />
+                        - Funkcja musi być dostępna przez ccall jako 'main_function'<br />
+                        - Kompilowane z Emscripten z flagami -sEXPORTED_FUNCTIONS=_main_function -sEXPORTED_RUNTIME_METHODS=ccall
                     </Text>
 
                     <Text mt="sm" fw={500}>Parametry dla zadania {is2D ? '(2D)' : '(1D)'}</Text>
@@ -206,7 +179,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         fullWidth
                         mt="sm"
                         size="md"
-                        disabled={disabled || !wasmFile || !jsFile}
+                        disabled={disabled || !wasmFile}
                         leftSection={<IconPlayerPlay size={16} />}
                         color="violet.6"
                         radius="md"

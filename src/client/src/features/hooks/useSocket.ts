@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import io from "socket.io-client";
 import { Worker } from "../types/Worker";
-import { Progress, QueueStatus, AllTaskParams, CustomParams1D, CustomParams2D } from "../types";
+import { Progress, QueueStatus, AllTaskParams } from "../types";
 
 const socket = io(`http://${window.location.hostname}:8080/client`);
 
@@ -44,13 +44,6 @@ export const useSocket = () => {
         setStartTime(Date.now());
         setTasksPerSecond(null);
         setProgress({ done: 0, elapsedTime: 0 });
-
-        // Validation for custom methods
-        if (!taskParams.wasmSource || taskParams.wasmSource.trim() === "") {
-            setIsCalculating(false);
-            const errorMsg = "Kod WASM nie może być pusty.";
-            return { success: false, error: errorMsg };
-        }
 
         socket.emit("start", { workerIds, taskParams });
         return { success: true };

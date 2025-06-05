@@ -24,8 +24,7 @@ export function TasksPanel() {
         x1: 0,
         x2: 1,
         dx: 0.00001,
-        N: 100000,
-        wasmSource: ""
+        N: 100000
     });
 
     const [customParams2D, setCustomParams2D] = useState<CustomParams2D>({
@@ -36,8 +35,7 @@ export function TasksPanel() {
         y2: 1,
         dx: 0.001,
         dy: 0.001,
-        N: 100000,
-        wasmSource: ""
+        N: 100000
     });
 
     useEffect(() => {
@@ -56,41 +54,24 @@ export function TasksPanel() {
         }
 
         const taskParams = currentMethod === 'custom1D' ? customParams1D : customParams2D;
-
-        if (!taskParams.wasmSource || taskParams.wasmSource.trim() === "") {
-            setError("Musisz przesłać pliki WASM i JS.");
-            return;
-        }
-
-        // Pobierz pliki bezpośrednio z formularza poprzez FormData
-        const formData = new FormData(e.target as HTMLFormElement);
-        const wasmFile = formData.get('wasmFile') as File;
-        const jsFile = formData.get('jsFile') as File;
-
-        // Sprawdź czy pliki zostały wybrane (mogą być w FileInput state)
         const form = e.target as HTMLFormElement;
         const wasmInput = form.querySelector('input[type="file"][accept=".wasm"]') as HTMLInputElement;
-        const jsInput = form.querySelector('input[type="file"][accept=".js"]') as HTMLInputElement;
 
         const selectedWasmFile = wasmInput?.files?.[0];
-        const selectedJsFile = jsInput?.files?.[0];
 
-        if (!selectedWasmFile || !selectedJsFile) {
+        if (!selectedWasmFile) {
             setError("Musisz przesłać oba pliki: WASM i JS loader");
             return;
         }
 
         try {
-            // Przesyłanie plików na serwer
             const uploadFormData = new FormData();
             uploadFormData.append('wasmFile', selectedWasmFile);
-            uploadFormData.append('jsFile', selectedJsFile);
             uploadFormData.append('clientId', socket?.id || '');
             uploadFormData.append('method', currentMethod);
 
             console.log('Uploading files:', {
                 wasmFile: selectedWasmFile.name,
-                jsFile: selectedJsFile.name,
                 clientId: socket?.id,
                 method: currentMethod
             });
@@ -108,7 +89,6 @@ export function TasksPanel() {
                 return;
             }
 
-            // Dodaj sanitizedId do parametrów zadania
             const taskParamsWithId = {
                 ...taskParams,
                 sanitizedId: uploadResult.sanitizedId
@@ -117,7 +97,7 @@ export function TasksPanel() {
             const taskResult = await startTask(taskParamsWithId as AllTaskParams, selectedWorkerIds);
 
             if (taskResult && !taskResult.success) {
-                setError(taskResult.error || "Wystąpił błąd podczas uruchamiania zadania");
+                setError("Wystąpił błąd podczas uruchamiania zadania");
             }
         } catch (error) {
             setError("Błąd podczas komunikacji z serwerem");
