@@ -6,8 +6,9 @@ try {
     throw e;
 }
 
+let isProcessing = false;
 let score;
-const clientModules = new Map();
+const loadedModules = new Map();
 
 function runBenchmark() {
     if (typeof BenchmarkModule === 'function') {
@@ -39,167 +40,210 @@ function runBenchmark() {
     }
 }
 
+async function loadCustomModule(sanitizedId) {
+    if (loadedModules.has(sanitizedId)) {
+        return loadedModules.get(sanitizedId);
+    }
+
+    // Pliki są serwowane przez główny serwer Node.js na porcie 8080
+    const serverOrigin = `http://${self.location.hostname}:8080`; // Użyj portu 8080
+    const scriptUrl = `${serverOrigin}/temp/${sanitizedId}.js`;
+    const wasmUrl = `${serverOrigin}/temp/${sanitizedId}.wasm`; // Jawna ścieżka do pliku .wasm
+
+    try {
+        console.log(`[Worker] Attempting to load custom module script from: ${scriptUrl}`);
+        importScripts(scriptUrl); // Załaduj JS z serwera na porcie 8080
+
+        if (typeof Module !== 'undefined') {
+            console.log(`[Worker] Module factory found, initializing... Attempting to load WASM from ${wasmUrl}`);
+
+            const moduleArgs = {
+                // locateFile jest potrzebne, aby wskazać Emscripten, skąd ma pobrać plik .wasm,
+                // zwłaszcza gdy nie jest on w tej samej lokalizacji względnej co skrypt JS
+                // lub gdy skrypt JS jest ładowany z innego origin/portu niż worker.
+                locateFile: function (path, scriptDirectory) {
+                    if (path.endsWith('.wasm')) {
+                        // Zawsze zwracaj pełną, poprawną ścieżkę do pliku .wasm na serwerze 8080
+                        return wasmUrl;
+                    }
+                    // Dla innych potencjalnych plików (choć zwykle tylko .wasm jest potrzebny)
+                    return (scriptDirectory || '') + path;
+                }
+            };
+
+            const moduleInstance = await Module(moduleArgs); // Przekaż argumenty do fabryki Modułu
+            loadedModules.set(sanitizedId, moduleInstance);
+            console.log(`[Worker] Module ${sanitizedId} loaded and initialized successfully`);
+            return moduleInstance;
+        } else {
+            // Ten błąd wystąpi, jeśli importScripts(scriptUrl) się powiedzie, ale plik JS
+            // z jakiegoś powodu nie zdefiniuje globalnego 'Module'.
+            throw new Error(`Global 'Module' was not defined after loading script from ${scriptUrl}. Check the script content and the server response for this URL.`);
+        }
+    } catch (error) {
+        // Ten blok catch złapie błędy zarówno z importScripts (np. 404 dla pliku JS),
+        // jak i z inicjalizacji modułu (np. błąd ładowania WASM).
+        console.error(`[Worker] Failed to load or initialize module ${sanitizedId} (JS: ${scriptUrl}, Expected WASM: ${wasmUrl}):`, error);
+        throw new Error(`Failed to load/initialize module ${sanitizedId}: ${error.message}`);
+    }
+}
+
+async function executeCustomTask(task, sanitizedId) {
+    try {
+        const module = await loadCustomModule(sanitizedId);
+
+        if (task.method === 'custom1D') {
+            console.log(`[Worker] Executing custom1D task: a=${task.a}, b=${task.b}, dx=${task.dx}`);
+            return module.ccall('main_function', 'number',
+                ['number', 'number', 'number'],
+                [task.a, task.b, task.dx]
+            );
+        } else if (task.method === 'custom2D') {
+            console.log(`[Worker] Executing custom2D task: a=${task.a}, b=${task.b}, c=${task.c}, d=${task.d}`);
+            return module.ccall('main_function', 'number',
+                ['number', 'number', 'number', 'number', 'number', 'number'],
+                [task.a, task.b, task.dx, task.c, task.d, task.dy]
+            );
+        } else {
+            throw new Error(`Unsupported method: ${task.method}`);
+        }
+    } catch (error) {
+        console.error(`[Worker] Error executing task:`, error);
+        throw error;
+    }
+}
+
+async function processBatch(tasks) {
+    if (!tasks || tasks.length === 0) {
+        console.log('[Worker] No tasks to process');
+        return;
+    }
+
+    const clientId = tasks[0].clientId;
+    const sanitizedId = tasks[0].sanitizedId;
+    const method = tasks[0].method;
+
+    console.log(`[Worker] Processing batch of ${tasks.length} tasks for client ${clientId}, method: ${method}, sanitizedId: ${sanitizedId}`);
+
+    let partialResult = 0;
+    let tasksProcessed = 0;
+
+    try {
+        for (let i = 0; i < tasks.length; i++) {
+            const currentTask = tasks[i];
+            console.log(`[Worker] Processing task ${i + 1}/${tasks.length}:`, currentTask);
+
+            try {
+                const result = await executeCustomTask(currentTask, sanitizedId);
+                partialResult += result;
+                tasksProcessed++;
+                console.log(`[Worker] Task ${i + 1} result: ${result}`);
+            } catch (taskError) {
+                console.error(`[Worker] Error in task ${i + 1}:`, taskError);
+                self.postMessage({
+                    type: 'task_error',
+                    data: {
+                        clientId,
+                        error: taskError.message,
+                        taskId: currentTask?.taskId || `task_${i}`
+                    }
+                });
+                // Kontynuuj z pozostałymi zadaniami
+                continue;
+            }
+        }
+
+        console.log(`[Worker] Batch completed. Total result: ${partialResult}, tasks processed: ${tasksProcessed}`);
+
+        // Wyślij wyniki tylko jeśli udało się przetworzyć jakieś zadania
+        if (tasksProcessed > 0) {
+            self.postMessage({
+                type: 'batch_progress',
+                data: {
+                    clientId,
+                    partialResult: partialResult,
+                    tasksProcessedInChunk: tasksProcessed,
+                    method,
+                    a: tasks[0].a,
+                    b: tasks[tasks.length - 1].b
+                }
+            });
+        }
+
+    } catch (error) {
+        console.error(`[Worker] Critical error in processBatch:`, error);
+        self.postMessage({
+            type: 'worker_error',
+            data: {
+                clientId,
+                error: error.message,
+                batchSize: tasks.length
+            }
+        });
+    }
+}
+
 self.onmessage = async function (event) {
     const message = event.data;
+    console.log(`[Worker] Received message:`, message.type, message);
+
     switch (message.type) {
         case 'run_benchmark':
             runBenchmark();
             break;
         case 'task_batch':
-            const batch = message.data;
-            const taskData = batch[0];
-            const clientId = taskData.clientId;
-            const sanitizedId = taskData.sanitizedId;
-            let moduleToUse = null;
+            if (isProcessing) {
+                console.log('[Worker] Already processing, ignoring new batch');
+                return;
+            }
+
+            console.log(`[Worker] Starting to process batch of ${message.data?.length || 0} tasks`);
+            isProcessing = true;
 
             try {
-                moduleToUse = clientModules.get(clientId);
-                if (!moduleToUse) {
-                    console.log(`[Worker] Module for ${clientId} not in cache. Loading...`);
-                    const customModuleArgs = {
-                        locateFile: (path, prefix) => `temp/${path}`
-                    };
-                    moduleToUse = await loadClientModule(clientId, sanitizedId, customModuleArgs);
-                }
-
-                if (!moduleToUse) {
-                    console.error(`[Worker] Module for clientId ${clientId} could not be loaded or retrieved.`);
-                    self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: "Module not available for processing." } });
-                    return;
-                }
-                processBatch(batch, moduleToUse);
+                await processBatch(message.data);
             } catch (error) {
-                console.error(`[Worker] Error processing task_batch for clientId ${clientId}:`, error);
-                self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Error during task processing: ${error.message}` } });
+                console.error('[Worker] Error in task_batch handler:', error);
+                self.postMessage({
+                    type: 'worker_error',
+                    data: {
+                        clientId: message.data[0]?.clientId || 'unknown',
+                        error: error.message
+                    }
+                });
+            } finally {
+                isProcessing = false;
+                console.log('[Worker] Finished processing batch');
             }
             break;
         case 'custom_wasm_available':
-            const { clientId: wasmClientId, sanitizedId: wasmSanitizedId } = message.data;
-            try {
-                unloadClientModule(wasmClientId);
-                const customModuleArgs = {
-                    locateFile: (path, prefix) => `temp/${path}`
-                };
-                await loadClientModule(wasmClientId, wasmSanitizedId, customModuleArgs);
-            } catch (error) {
-                console.error(`[Worker] Error reloading custom WASM for ${wasmClientId}:`, error);
-                self.postMessage({ type: 'worker_error', data: { clientId: wasmClientId, error: `Failed to reload custom WASM: ${error.message}` } });
-            }
+            console.log(`[Worker] Custom WASM available for client: ${message.data.clientId}`);
+            self.postMessage({
+                type: 'custom_module_loaded',
+                data: { clientId: message.data.clientId }
+            });
             break;
         case 'unload_custom_wasm':
-            const { clientId: unloadClientId } = message.data;
-            unloadClientModule(unloadClientId);
+            console.log(`[Worker] Unloading WASM for: ${message.data.sanitizedId}`);
+            if (loadedModules.has(message.data.sanitizedId)) {
+                loadedModules.delete(message.data.sanitizedId);
+            }
             break;
         default:
-            console.log('[Worker] Received unhandled message type from main thread:', message.type);
+            console.log('[Worker] Received unhandled message type:', message.type);
     }
 };
 
-
-async function loadClientModule(clientId, sanitizedId, moduleArgs) {
-    if (clientModules.has(clientId)) {
-        console.log(`[Worker] Module for ${clientId} already in cache.`);
-        return clientModules.get(clientId);
-    }
-    const scriptSrc = `./temp/${clientId}.js?v=${Date.now()}`;
-    console.log(`[Worker] Loading module for ${clientId} from ${scriptSrc}`);
-
-    try {
-        importScripts(scriptSrc);
-
-        const moduleFunctionName = `Module_${sanitizedId}`;
-        if (typeof self[moduleFunctionName] === 'function') {
-            const moduleFactory = self[moduleFunctionName];
-            const instance = await moduleFactory(moduleArgs || {
-                locateFile: (path, prefix) => `temp/${path}`
-            });
-            clientModules.set(clientId, instance);
-            console.log(`[Worker] Successfully loaded and instantiated module for ${clientId}`);
-            self.postMessage({ type: 'custom_module_loaded', data: { clientId } }); // Inform main thread
-            return instance;
-        } else {
-            console.error(`[Worker] Module factory function "${moduleFunctionName}" not found on self after importing ${scriptSrc}.`);
-            throw new Error(`Module factory ${moduleFunctionName} not found.`);
-        }
-    } catch (error) {
-        console.error(`[Worker] Error loading module script ${scriptSrc} for client ${clientId}:`, error);
-        self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Failed to load module script: ${error.message}` } });
-        throw error;
-    }
-}
-
-function unloadClientModule(clientId) {
-    if (clientModules.has(clientId)) {
-        clientModules.delete(clientId);
-    }
-}
-
-async function processBatch(batch, moduleInstance) {
-    const method = batch[0].method;
-    const clientId = batch[0].clientId;
-    const originalBatchId = batch[0].taskId;
-    const batchA = batch[0].a;
-    const batchB = batch[0].b;
-
-    let tasksProcessedInCurrentChunk = 0;
-    let sumForCurrentChunk = 0;
-    const TASKS_PER_PROGRESS_UPDATE = 5;
-    const TASKS_BETWEEN_YIELDS = 10;
-
-    for (let i = 0; i < batch.length; i++) {
-        const data = batch[i];
-        let result;
-
-        try {
-            if (data.method === 'montecarlo') {
-                const seedOffset = data.seedOffset || 0;
-                result = moduleInstance.ccall(
-                    "monte_carlo", "number",
-                    ["number", "number", "number", "number"],
-                    [data.a, data.b, data.samples, seedOffset]
-                );
-            } else {
-                result = moduleInstance.ccall(
-                    "add", "number",
-                    ["number", "number", "number"],
-                    [data.a, data.b, data.dx]
-                );
-            }
-            sumForCurrentChunk += result;
-            tasksProcessedInCurrentChunk++;
-        } catch (e) {
-            console.error(`[Worker] Error executing ccall for task ${data.taskId} (method: ${data.method}):`, e);
-            self.postMessage({ type: 'task_error', data: { taskId: data.taskId, clientId: clientId, error: `ccall execution failed: ${e.message}` } });
-        }
-
-        if (tasksProcessedInCurrentChunk > 0 && (tasksProcessedInCurrentChunk % TASKS_PER_PROGRESS_UPDATE === 0 || (i + 1) === batch.length)) {
-            self.postMessage({
-                type: 'batch_progress',
-                data: {
-                    batchId: originalBatchId,
-                    clientId: clientId,
-                    partialResult: sumForCurrentChunk,
-                    tasksProcessedInChunk: tasksProcessedInCurrentChunk,
-                    totalTasksInBatch: batch.length,
-                    isFinalChunk: (i + 1) === batch.length,
-                    method: method,
-                    a: batchA,
-                    b: batchB
-                }
-            });
-            sumForCurrentChunk = 0;
-            tasksProcessedInCurrentChunk = 0;
-        }
-
-        if ((i + 1) % TASKS_BETWEEN_YIELDS === 0 && i < batch.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 0));
-        }
-    }
-}
-
 self.onerror = function (message, source, lineno, colno, error) {
     console.error("[Worker] Uncaught error:", message, "at", source, lineno, colno, error);
-    self.postMessage({ type: 'worker_error', data: { error: `Uncaught: ${message}`, source: source, lineno: lineno } });
+    self.postMessage({
+        type: 'worker_error',
+        data: {
+            error: `Uncaught: ${message}`,
+            source: source,
+            lineno: lineno
+        }
+    });
     return true;
 };
 

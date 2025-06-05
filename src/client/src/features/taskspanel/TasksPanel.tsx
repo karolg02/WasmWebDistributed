@@ -58,14 +58,70 @@ export function TasksPanel() {
         const taskParams = currentMethod === 'custom1D' ? customParams1D : customParams2D;
 
         if (!taskParams.wasmSource || taskParams.wasmSource.trim() === "") {
-            setError("Kod WASM nie może być pusty.");
+            setError("Musisz przesłać pliki WASM i JS.");
             return;
         }
 
-        const taskResult = await startTask(taskParams as AllTaskParams, selectedWorkerIds);
+        // Pobierz pliki bezpośrednio z formularza poprzez FormData
+        const formData = new FormData(e.target as HTMLFormElement);
+        const wasmFile = formData.get('wasmFile') as File;
+        const jsFile = formData.get('jsFile') as File;
 
-        if (taskResult && !taskResult.success) {
-            setError(taskResult.error || "Wystąpił błąd podczas uruchamiania zadania");
+        // Sprawdź czy pliki zostały wybrane (mogą być w FileInput state)
+        const form = e.target as HTMLFormElement;
+        const wasmInput = form.querySelector('input[type="file"][accept=".wasm"]') as HTMLInputElement;
+        const jsInput = form.querySelector('input[type="file"][accept=".js"]') as HTMLInputElement;
+
+        const selectedWasmFile = wasmInput?.files?.[0];
+        const selectedJsFile = jsInput?.files?.[0];
+
+        if (!selectedWasmFile || !selectedJsFile) {
+            setError("Musisz przesłać oba pliki: WASM i JS loader");
+            return;
+        }
+
+        try {
+            // Przesyłanie plików na serwer
+            const uploadFormData = new FormData();
+            uploadFormData.append('wasmFile', selectedWasmFile);
+            uploadFormData.append('jsFile', selectedJsFile);
+            uploadFormData.append('clientId', socket?.id || '');
+            uploadFormData.append('method', currentMethod);
+
+            console.log('Uploading files:', {
+                wasmFile: selectedWasmFile.name,
+                jsFile: selectedJsFile.name,
+                clientId: socket?.id,
+                method: currentMethod
+            });
+
+            const uploadResponse = await fetch(`http://${window.location.hostname}:8080/upload-wasm`, {
+                method: 'POST',
+                body: uploadFormData
+            });
+
+            const uploadResult = await uploadResponse.json();
+            console.log('Upload result:', uploadResult);
+
+            if (!uploadResult.success) {
+                setError(uploadResult.error || "Błąd podczas przesyłania plików");
+                return;
+            }
+
+            // Dodaj sanitizedId do parametrów zadania
+            const taskParamsWithId = {
+                ...taskParams,
+                sanitizedId: uploadResult.sanitizedId
+            };
+
+            const taskResult = await startTask(taskParamsWithId as AllTaskParams, selectedWorkerIds);
+
+            if (taskResult && !taskResult.success) {
+                setError(taskResult.error || "Wystąpił błąd podczas uruchamiania zadania");
+            }
+        } catch (error) {
+            setError("Błąd podczas komunikacji z serwerem");
+            console.error('Upload error:', error);
         }
     };
 

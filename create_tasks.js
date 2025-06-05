@@ -1,50 +1,67 @@
 async function createTasks(params) {
-    const { a = 0, b = Math.PI, N = 10000 } = params;
-
-    if (params.method === 'montecarlo') {
-        const { samples = 10000, y_max = 1 } = params;
-        return createMonteCarloTasks({ a, b, samples, y_max, N });
-    } else {
-        const { dx = 0.000001 } = params;
-        return createTrapezoidalTasks({ a, b, dx, N });
+    if (params.method === 'custom1D') {
+        return createCustom1DTasks(params);
+    } else if (params.method === 'custom2D') {
+        return createCustom2DTasks(params);
     }
+
+    // Fallback dla starych metod jeśli nadal potrzebne
+    return [];
 }
 
-async function createTrapezoidalTasks({ a = 0, b = Math.PI, dx = 0.000001, N = 100000 }) {
-    const fragment = (b - a) / N;
+async function createCustom1DTasks(params) {
+    const { x1 = 0, x2 = 1, dx = 0.00001, N = 100000 } = params;
+    const fragment = (x2 - x1) / N;
     const tasks = [];
 
     for (let i = 0; i < N; i++) {
-        const start = a + i * fragment;
+        const start = x1 + i * fragment;
         const end = start + fragment;
 
         tasks.push({
             type: "task",
-            method: "trapezoidal",
+            method: "custom1D",
             a: start,
             b: end,
             dx: dx,
-            taskId: `trap_task_${i}`
+            taskId: `custom1D_task_${i}`
         });
     }
 
     return tasks;
 }
 
-async function createMonteCarloTasks({ a = 0, b = Math.PI, samples = 10000, N = 10000 }) {
+async function createCustom2DTasks(params) {
+    const { x1 = 0, x2 = 1, y1 = 0, y2 = 1, dx = 0.001, dy = 0.001, N = 100000 } = params;
     const tasks = [];
-    const samplesPerTask = Math.floor(samples / N);
+    const totalArea = (x2 - x1) * (y2 - y1);
 
-    for (let i = 0; i < N; i++) {
-        tasks.push({
-            type: "task",
-            method: "montecarlo",
-            a: a,
-            b: b,
-            samples: samplesPerTask,
-            taskId: `mc_task_${i}`,
-            seedOffset: i
-        });
+    // Przybliżona liczba segmentów w każdym wymiarze
+    const segmentsPerDim = Math.ceil(Math.sqrt(N));
+    const xStep = (x2 - x1) / segmentsPerDim;
+    const yStep = (y2 - y1) / segmentsPerDim;
+
+    let taskId = 0;
+    for (let i = 0; i < segmentsPerDim && taskId < N; i++) {
+        for (let j = 0; j < segmentsPerDim && taskId < N; j++) {
+            const xStart = x1 + i * xStep;
+            const xEnd = Math.min(x1 + (i + 1) * xStep, x2);
+            const yStart = y1 + j * yStep;
+            const yEnd = Math.min(y1 + (j + 1) * yStep, y2);
+
+            tasks.push({
+                type: "task",
+                method: "custom2D",
+                a: xStart,
+                b: xEnd,
+                c: yStart,
+                d: yEnd,
+                dx: dx,
+                dy: dy,
+                taskId: `custom2D_task_${taskId}`
+            });
+            taskId++;
+        }
     }
 
     return tasks;
