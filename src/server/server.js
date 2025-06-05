@@ -39,13 +39,11 @@ function sanitizeJsIdentifier(id) {
     return id.replace(/[^a-zA-Z0-9_]/g, '_');
 }
 
-// Konfiguracja multer - używamy timestamp i oryginalną nazwę jako fallback
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, tempDir);
     },
     filename: (req, file, cb) => {
-        // Tymczasowa nazwa - zostanie przemianowana po otrzymaniu clientId
         const timestamp = Date.now();
         const ext = path.extname(file.originalname);
         cb(null, `temp_${timestamp}_${file.fieldname}${ext}`);
@@ -69,7 +67,7 @@ function cleanupClientFiles(clientId, tempDir) {
     });
 }
 
-// Endpoint do uploadu plików WASM
+// do uploadu plikow WASM
 app.post('/upload-wasm', upload.fields([
     { name: 'wasmFile', maxCount: 1 },
     { name: 'jsFile', maxCount: 1 }

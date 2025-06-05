@@ -8,6 +8,23 @@ try {
 
 let score;
 const clientModules = new Map();
+let globalModuleFactory = null;
+
+async function initializeGlobalModule() {
+    try {
+        if (!globalModuleFactory) {
+            importScripts('./loader.js');
+            if (typeof self['Module'] === 'function') {
+                globalModuleFactory = self['Module'];
+            } else {
+                throw new Error('Module factory not found in loader.js');
+            }
+        }
+    } catch (error) {
+        console.error('[Worker] Error loading global module:', error);
+        throw error;
+    }
+}
 
 function runBenchmark() {
     if (typeof BenchmarkModule === 'function') {
@@ -27,6 +44,11 @@ function runBenchmark() {
             const t1 = performance.now();
             score = (1 / Math.max(0.01, (t1 - t0))).toFixed(4) * 1000;
             self.postMessage({ type: 'benchmark_result', score: score });
+
+            // po zakończeniu ladujemy globalny modul loadera
+            initializeGlobalModule().then().catch(error => {
+                console.error('[Worker] Failed to initialize global module after benchmark:', error);
+            });
         }).catch(error => {
             console.error("[Worker] Error during benchmark module initialization:", error);
             score = 0;
@@ -55,9 +77,8 @@ self.onmessage = async function (event) {
             try {
                 moduleToUse = clientModules.get(clientId);
                 if (!moduleToUse) {
-                    console.log(`[Worker] Module for ${clientId} not in cache. Loading...`);
                     const customModuleArgs = {
-                        locateFile: (path, prefix) => `temp/${path}`
+                        locateFile: (path, prefix) => `temp/${sanitizedId}.wasm`
                     };
                     moduleToUse = await loadClientModule(clientId, sanitizedId, customModuleArgs);
                 }
@@ -78,12 +99,7 @@ self.onmessage = async function (event) {
             try {
                 unloadClientModule(wasmClientId);
                 const customModuleArgs = {
-                    locateFile: (path, prefix) => {
-                        if (path.endsWith('.wasm')) {
-                            return `temp/${wasmSanitizedId}.wasm`;
-                        }
-                        return `temp/${path}`;
-                    }
+                    locateFile: (path, prefix) => `temp/${wasmSanitizedId}.wasm`
                 };
                 await loadClientModule(wasmClientId, wasmSanitizedId, customModuleArgs);
             } catch (error) {
@@ -95,46 +111,34 @@ self.onmessage = async function (event) {
             const { clientId: unloadClientId } = message.data;
             unloadClientModule(unloadClientId);
             break;
-        default:
-            console.log('[Worker] Received unhandled message type from main thread:', message.type);
     }
 };
 
-
 async function loadClientModule(clientId, sanitizedId, moduleArgs) {
     if (clientModules.has(clientId)) {
-        console.log(`[Worker] Module for ${clientId} already in cache.`);
         return clientModules.get(clientId);
     }
-    // Używaj sanitizedId dla nazwy pliku
-    const scriptSrc = `./temp/${sanitizedId}.js?v=${Date.now()}`;
-    console.log(`[Worker] Loading module for ${clientId} from ${scriptSrc}`);
 
     try {
-        importScripts(scriptSrc);
-
-        const moduleFunctionName = `Module`;
-        if (typeof self[moduleFunctionName] === 'function') {
-            const moduleFactory = self[moduleFunctionName];
-            const instance = await moduleFactory(moduleArgs || {
-                locateFile: (path, prefix) => {
-                    if (path.endsWith('.wasm')) {
-                        return `temp/${sanitizedId}.wasm`;
-                    }
-                    return `temp/${path}`;
-                }
-            });
-            clientModules.set(clientId, instance);
-            console.log(`[Worker] Successfully loaded and instantiated module for ${clientId}`);
-            self.postMessage({ type: 'custom_module_loaded', data: { clientId } });
-            return instance;
-        } else {
-            console.error(`[Worker] Module factory function "${moduleFunctionName}" not found on self after importing ${scriptSrc}.`);
-            throw new Error(`Module factory ${moduleFunctionName} not found.`);
+        if (!globalModuleFactory) {
+            await initializeGlobalModule();
         }
+
+        const instance = await globalModuleFactory(moduleArgs || {
+            locateFile: (path, prefix) => {
+                if (path.endsWith('.wasm')) {
+                    return `temp/${sanitizedId}.wasm`;
+                }
+                return `temp/${path}`;
+            }
+        });
+
+        clientModules.set(clientId, instance);
+        self.postMessage({ type: 'custom_module_loaded', data: { clientId } });
+        return instance;
     } catch (error) {
-        console.error(`[Worker] Error loading module script ${scriptSrc} for client ${clientId}:`, error);
-        self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Failed to load module script: ${error.message}` } });
+        console.error(`[Worker] Error creating module instance for client ${clientId}:`, error);
+        self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Failed to create module instance: ${error.message}` } });
         throw error;
     }
 }
@@ -174,13 +178,6 @@ async function processBatch(batch, moduleInstance) {
                     ["number", "number", "number", "number", "number"],
                     [data.a, data.b, data.dx, data.dy || data.dx, data.c || 0]
                 );
-            } else {
-                // Fallback dla innych metod
-                result = moduleInstance.ccall(
-                    "main_function", "number",
-                    ["number", "number", "number"],
-                    [data.a, data.b, data.dx]
-                );
             }
             sumForCurrentChunk += result;
             tasksProcessedInCurrentChunk++;
@@ -215,10 +212,8 @@ async function processBatch(batch, moduleInstance) {
 }
 
 self.onerror = function (message, source, lineno, colno, error) {
-    console.error("[Worker] Uncaught error:", message, "at", source, lineno, colno, error);
     self.postMessage({ type: 'worker_error', data: { error: `Uncaught: ${message}`, source: source, lineno: lineno } });
     return true;
 };
 
-console.log('[Worker] Worker script loaded and initialized.');
 self.postMessage({ type: 'worker_script_ready' });

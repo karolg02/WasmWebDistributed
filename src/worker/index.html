@@ -147,7 +147,6 @@
                             b: message.data.b,
                         };
                         socket.emit("batch_result", progressDataForServer);
-                        console.log(`Worker ${workerId} przetworzył ${message.data.tasksProcessedInChunk} zadań. Wynik: ${message.data.partialResult}`);
                         break;
                     case 'task_error':
                         socket.emit("task_error", message.data);

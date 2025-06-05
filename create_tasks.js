@@ -4,9 +4,6 @@ async function createTasks(params) {
     } else if (params.method === 'custom2D') {
         return createCustom2DTasks(params);
     }
-
-    // Fallback dla starych metod jeśli nadal potrzebne
-    return [];
 }
 
 async function createCustom1DTasks(params) {
