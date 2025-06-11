@@ -1,21 +1,12 @@
 export interface CustomParams1D {
     method: 'custom1D';
-    x1: number;
-    x2: number;
-    dx: number;
-    N: number;
+    params: number[];
     sanitizedId?: string;
 }
 
 export interface CustomParams2D {
     method: 'custom2D';
-    x1: number;
-    x2: number;
-    y1: number;
-    y2: number;
-    dx: number;
-    dy: number;
-    N: number;
+    params: number[];
     sanitizedId?: string;
 }
 

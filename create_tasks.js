@@ -1,66 +1,66 @@
-async function createTasks(params) {
-    if (params.method === 'custom1D') {
-        return createCustom1DTasks(params);
-    } else if (params.method === 'custom2D') {
-        return createCustom2DTasks(params);
+async function createTasks(taskParams) {
+    if (taskParams.method === "custom1D") {
+        return createCustom1DTasks(taskParams);
+    } else if (taskParams.method === "custom2D") {
+        return createCustom2DTasks(taskParams);
     }
+    throw new Error(`Unknown method: ${taskParams.method}`);
 }
 
-async function createCustom1DTasks(params) {
-    const { x1 = 0, x2 = 1, dx = 0.00001, N = 100000 } = params;
+function createCustom1DTasks(taskParams) {
+    const [x1, x2, N, dx, ...additionalParams] = taskParams.params;
     const fragment = (x2 - x1) / N;
     const tasks = [];
 
     for (let i = 0; i < N; i++) {
-        const start = x1 + i * fragment;
-        const end = start + fragment;
+        const a = x1 + i * fragment;
+        const b = a + fragment;
 
         tasks.push({
-            type: "task",
-            method: "custom1D",
-            a: start,
-            b: end,
+            taskId: i,
+            method: taskParams.method,
+            a: a,
+            b: b,
             dx: dx,
-            taskId: `custom1D_task_${i}`
+            paramsArray: [a, b, dx, ...additionalParams]
         });
     }
-
     return tasks;
 }
 
-async function createCustom2DTasks(params) {
-    const { x1 = 0, x2 = 1, y1 = 0, y2 = 1, dx = 0.001, dy = 0.001, N = 100000 } = params;
+function createCustom2DTasks(taskParams) {
+    const [x1, x2, y1, y2, N, dx, dy, ...additionalParams] = taskParams.params;
+
+    const nx = Math.ceil(Math.sqrt(N));
+    const ny = Math.ceil(N / nx);
+
+    const fragmentX = (x2 - x1) / nx;
+    const fragmentY = (y2 - y1) / ny;
+
     const tasks = [];
-    const totalArea = (x2 - x1) * (y2 - y1);
-
-    // Przybliżona liczba segmentów w każdym wymiarze
-    const segmentsPerDim = Math.ceil(Math.sqrt(N));
-    const xStep = (x2 - x1) / segmentsPerDim;
-    const yStep = (y2 - y1) / segmentsPerDim;
-
     let taskId = 0;
-    for (let i = 0; i < segmentsPerDim && taskId < N; i++) {
-        for (let j = 0; j < segmentsPerDim && taskId < N; j++) {
-            const xStart = x1 + i * xStep;
-            const xEnd = Math.min(x1 + (i + 1) * xStep, x2);
-            const yStart = y1 + j * yStep;
-            const yEnd = Math.min(y1 + (j + 1) * yStep, y2);
+
+    for (let i = 0; i < nx && taskId < N; i++) {
+        for (let j = 0; j < ny && taskId < N; j++) {
+            const a = x1 + i * fragmentX;
+            const b = a + fragmentX;
+            const c = y1 + j * fragmentY;
+            const d = c + fragmentY;
 
             tasks.push({
-                type: "task",
-                method: "custom2D",
-                a: xStart,
-                b: xEnd,
-                c: yStart,
-                d: yEnd,
+                taskId: taskId,
+                method: taskParams.method,
+                a: a,
+                b: b,
+                c: c,
+                d: d,
                 dx: dx,
                 dy: dy,
-                taskId: `custom2D_task_${taskId}`
+                paramsArray: [a, b, c, d, dx, dy, taskId, ...additionalParams]
             });
             taskId++;
         }
     }
-
     return tasks;
 }
 

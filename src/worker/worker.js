@@ -158,56 +158,70 @@ async function processBatch(batch, moduleInstance) {
 
     let tasksProcessedInCurrentChunk = 0;
     let sumForCurrentChunk = 0;
-    const TASKS_PER_PROGRESS_UPDATE = 5;
+    const TASKS_PER_PROGRESS_UPDATE = 50;
     const TASKS_BETWEEN_YIELDS = 10;
 
-    for (let i = 0; i < batch.length; i++) {
-        const data = batch[i];
-        let result;
+    const maxParamsLength = Math.max(...batch.map(task => task.paramsArray.length));
+    const maxArraySize = maxParamsLength * 8;
+    const sharedArrayPtr = moduleInstance._malloc(maxArraySize);
 
-        try {
-            if (data.method === 'custom1D') {
-                result = moduleInstance.ccall(
-                    "main_function", "number",
-                    ["number", "number", "number"],
-                    [data.a, data.b, data.dx]
-                );
-            } else if (data.method === 'custom2D') {
-                result = moduleInstance.ccall(
-                    "main_function", "number",
-                    ["number", "number", "number", "number", "number"],
-                    [data.a, data.b, data.dx, data.dy || data.dx, data.c || 0]
-                );
-            }
-            sumForCurrentChunk += result;
-            tasksProcessedInCurrentChunk++;
-        } catch (e) {
-            console.error(`[Worker] Error executing ccall for task ${data.taskId} (method: ${data.method}):`, e);
-            self.postMessage({ type: 'task_error', data: { taskId: data.taskId, clientId: clientId, error: `ccall execution failed: ${e.message}` } });
-        }
+    if (!sharedArrayPtr) {
+        throw new Error('Failed to allocate shared memory in WASM');
+    }
 
-        if (tasksProcessedInCurrentChunk > 0 && (tasksProcessedInCurrentChunk % TASKS_PER_PROGRESS_UPDATE === 0 || (i + 1) === batch.length)) {
-            self.postMessage({
-                type: 'batch_progress',
-                data: {
-                    batchId: originalBatchId,
-                    clientId: clientId,
-                    partialResult: sumForCurrentChunk,
-                    tasksProcessedInChunk: tasksProcessedInCurrentChunk,
-                    totalTasksInBatch: batch.length,
-                    isFinalChunk: (i + 1) === batch.length,
-                    method: method,
-                    a: batchA,
-                    b: batchB
+    try {
+        for (let i = 0; i < batch.length; i++) {
+            const data = batch[i];
+            let result;
+
+            try {
+                if (data.method === 'custom1D' || data.method === 'custom2D') {
+                    const params = data.paramsArray;
+                    for (let j = 0; j < params.length; j++) {
+                        moduleInstance.setValue(sharedArrayPtr + j * 8, params[j], 'double');
+                    }
+                    result = moduleInstance.ccall(
+                        "main_function", "number",
+                        ["number"],
+                        [sharedArrayPtr]
+                    );
                 }
-            });
-            sumForCurrentChunk = 0;
-            tasksProcessedInCurrentChunk = 0;
-        }
 
-        if ((i + 1) % TASKS_BETWEEN_YIELDS === 0 && i < batch.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 0));
+                if (result !== undefined && !isNaN(result)) {
+                    sumForCurrentChunk += result;
+                    tasksProcessedInCurrentChunk++;
+                } else {
+                    console.error(`[Worker] Invalid result from task ${data.taskId}:`, result);
+                }
+            } catch (e) {
+                console.error(`[Worker] Error executing ccall for task ${data.taskId} (method: ${data.method}):`, e);
+                self.postMessage({ type: 'task_error', data: { taskId: data.taskId, clientId: clientId, error: `ccall execution failed: ${e.message}` } });
+            }
+
+            if (tasksProcessedInCurrentChunk > 0 && (tasksProcessedInCurrentChunk % TASKS_PER_PROGRESS_UPDATE === 0 || (i + 1) === batch.length)) {
+                self.postMessage({
+                    type: 'batch_progress',
+                    data: {
+                        batchId: originalBatchId,
+                        clientId: clientId,
+                        partialResult: sumForCurrentChunk,
+                        tasksProcessedInChunk: tasksProcessedInCurrentChunk,
+                        totalTasksInBatch: batch.length,
+                        isFinalChunk: (i + 1) === batch.length,
+                        method: method,
+                        a: batchA,
+                        b: batchB
+                    }
+                });
+                sumForCurrentChunk = 0;
+                tasksProcessedInCurrentChunk = 0;
+            }
+            if ((i + 1) % TASKS_BETWEEN_YIELDS === 0 && i < batch.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
         }
+    } finally {
+        moduleInstance._free(sharedArrayPtr);
     }
 }
 

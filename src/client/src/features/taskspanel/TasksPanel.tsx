@@ -21,21 +21,12 @@ export function TasksPanel() {
 
     const [customParams1D, setCustomParams1D] = useState<CustomParams1D>({
         method: 'custom1D',
-        x1: 0,
-        x2: 1,
-        dx: 0.00001,
-        N: 100000
+        params: [0, 1, 10000, 0.001],
     });
 
     const [customParams2D, setCustomParams2D] = useState<CustomParams2D>({
         method: 'custom2D',
-        x1: 0,
-        x2: 1,
-        y1: 0,
-        y2: 1,
-        dx: 0.001,
-        dy: 0.001,
-        N: 100000
+        params: [0, 1, 0, 1, 10000, 0.001, 0.001],
     });
 
     useEffect(() => {
@@ -60,7 +51,7 @@ export function TasksPanel() {
         const selectedWasmFile = wasmInput?.files?.[0];
 
         if (!selectedWasmFile) {
-            setError("Musisz przesłać oba pliki: WASM i JS loader");
+            setError("Musisz przesłać plik WASM");
             return;
         }
 
@@ -73,7 +64,8 @@ export function TasksPanel() {
             console.log('Uploading files:', {
                 wasmFile: selectedWasmFile.name,
                 clientId: socket?.id,
-                method: currentMethod
+                method: currentMethod,
+                params: taskParams.params // DEBUG - zobacz jakie parametry są wysyłane
             });
 
             const uploadResponse = await fetch(`http://${window.location.hostname}:8080/upload-wasm`, {
@@ -93,6 +85,8 @@ export function TasksPanel() {
                 ...taskParams,
                 sanitizedId: uploadResult.sanitizedId
             };
+
+            console.log('Final task params:', taskParamsWithId); // DEBUG
 
             const taskResult = await startTask(taskParamsWithId as AllTaskParams, selectedWorkerIds);
 
