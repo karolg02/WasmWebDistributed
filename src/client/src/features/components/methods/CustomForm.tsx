@@ -152,16 +152,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                     )}
 
                     <Group grow>
-                        <NumberInput
-                            label="Liczba zadań (N)"
-                            value={getParam(nIndex, 100)}
-                            onChange={(val) => updateParam(nIndex, Number(val) || 100)}
-                            min={1}
-                            max={100000}
-                            disabled={disabled}
-                            required
-                            radius="md"
-                        />
+
                         <NumberInput
                             label="dx"
                             value={getParam(dxIndex, 0.001)}
@@ -173,20 +164,30 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             required
                             radius="md"
                         />
+                        {is2D && (
+                            <NumberInput
+                                label="dy"
+                                value={getParam(dyIndex, 0.001)}
+                                onChange={(val) => updateParam(dyIndex, Number(val) || 0.001)}
+                                min={0.000001}
+                                step={0.001}
+                                disabled={disabled}
+                                required
+                                radius="md"
+                            />
+                        )}
                     </Group>
 
-                    {is2D && (
-                        <NumberInput
-                            label="dy"
-                            value={getParam(dyIndex, 0.001)}
-                            onChange={(val) => updateParam(dyIndex, Number(val) || 0.001)}
-                            min={0.000001}
-                            step={0.001}
-                            disabled={disabled}
-                            required
-                            radius="md"
-                        />
-                    )}
+                    <NumberInput
+                        label="Liczba zadań (N)"
+                        value={getParam(nIndex, 100)}
+                        onChange={(val) => updateParam(nIndex, Number(val) || 100)}
+                        min={1}
+                        max={100000}
+                        disabled={disabled}
+                        required
+                        radius="md"
+                    />
 
                     {/* Dodatkowe parametry */}
                     <Group justify="space-between">

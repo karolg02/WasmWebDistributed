@@ -158,7 +158,7 @@ async function processBatch(batch, moduleInstance) {
 
     let tasksProcessedInCurrentChunk = 0;
     let sumForCurrentChunk = 0;
-    const TASKS_PER_PROGRESS_UPDATE = 50;
+    const TASKS_PER_PROGRESS_UPDATE = 10;
     const TASKS_BETWEEN_YIELDS = 10;
 
     const maxParamsLength = Math.max(...batch.map(task => task.paramsArray.length));

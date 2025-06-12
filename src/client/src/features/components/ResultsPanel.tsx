@@ -28,6 +28,17 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     const [, setShowResult] = useState(false);
     const [localStartTime, setLocalStartTime] = useState<number | null>(null);
 
+    const getTotalTasks = () => {
+        if (taskParams.params && Array.isArray(taskParams.params)) {
+            if (method === 'custom1D') {
+                return taskParams.params[2] || 0;
+            } else if (method === 'custom2D') {
+                return taskParams.params[4] || 0;
+            }
+        }
+        return 0;
+    };
+
     useEffect(() => {
         if (isCalculating && !localStartTime) {
             setLocalStartTime(Date.now());
@@ -36,7 +47,9 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         }
     }, [isCalculating]);
 
-    const progressPercentage = (progress.done / taskParams.N) * 100;
+    const totalTasks = getTotalTasks();
+
+    const progressPercentage = totalTasks > 0 ? (progress.done / totalTasks) * 100 : 0;
 
     useEffect(() => {
         if (result !== null) {
@@ -56,13 +69,13 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         const elapsedTime = getCurrentElapsedTime();
         if (!isCalculating || !elapsedTime || elapsedTime < 1) return null;
 
-        const percentComplete = progress.done / taskParams.N;
+        const percentComplete = progress.done / totalTasks;
         if (percentComplete <= 0 || percentComplete > 0.99) return null;
 
         const currentTasksPerSecond = progress.done / elapsedTime;
         if (currentTasksPerSecond <= 0) return null;
 
-        const remainingTasks = taskParams.N - progress.done;
+        const remainingTasks = totalTasks - progress.done;
         const effectiveRate = tasksPerSecond && tasksPerSecond > 0 ? tasksPerSecond : currentTasksPerSecond;
         return remainingTasks / effectiveRate;
     };
@@ -76,7 +89,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     };
 
     const getProgressText = () => {
-        return `Postęp: ${progress.done} / ${taskParams.N} zadań`;
+        return `Postęp: ${progress.done} / ${totalTasks} zadań`;
     };
 
     const getElapsedTimeText = () => {
