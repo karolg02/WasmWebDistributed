@@ -1,13 +1,16 @@
 const { Server } = require("socket.io");
 const amqp = require("amqplib");
 const http = require("http");
+const express = require("express");
+const multer = require("multer");
 const { createTasks } = require("../../create_tasks");
 const { createQueuePerClient } = require("./modules/queue");
 const fs = require('fs');
 const path = require('path');
-const { compileTrapezIntegration, compileMonteCarlo, cleanupClientFiles } = require('./modules/compiler-service'); // Import compileMonteCarlo
 
-const server = http.createServer();
+const app = express();
+app.use(express.json());
+const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*" }
 });
@@ -28,6 +31,116 @@ const tempDir = path.join(__dirname, '../worker/temp');
 if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
 }
+
+function sanitizeJsIdentifier(id) {
+    if (!id || typeof id !== 'string') {
+        return 'unknown_client';
+    }
+    return id.replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, tempDir);
+    },
+    filename: (req, file, cb) => {
+        const timestamp = Date.now();
+        const ext = path.extname(file.originalname);
+        cb(null, `temp_${timestamp}_${file.fieldname}${ext}`);
+    }
+});
+
+const upload = multer({ storage: storage });
+
+app.post('/upload-wasm', upload.fields([
+    { name: 'wasmFile', maxCount: 1 }
+]), (req, res) => {
+    try {
+        const { clientId, method } = req.body;
+
+        if (!clientId) {
+            return res.json({
+                success: false,
+                error: "Brak clientId w żądaniu"
+            });
+        }
+
+        const sanitizedId = sanitizeJsIdentifier(clientId);
+
+        if (!req.files || !req.files['wasmFile']) {
+            return res.json({
+                success: false,
+                error: "Brak wymaganego pliku WASM"
+            });
+        }
+
+        // Pobierz tymczasową ścieżkę pliku WASM
+        const wasmTempFile = req.files['wasmFile'][0];
+
+        // Docelowa ścieżka z poprawną nazwą
+        const wasmPath = path.join(tempDir, `${sanitizedId}.wasm`);
+
+        // Przenieś plik z tymczasowej nazwy na docelową
+        try {
+            fs.renameSync(wasmTempFile.path, wasmPath);
+        } catch (renameError) {
+            console.error('[Server] Error renaming WASM file:', renameError);
+            return res.json({
+                success: false,
+                error: "Błąd podczas zapisywania pliku WASM"
+            });
+        }
+
+        // Sprawdź czy plik został zapisany
+        if (!fs.existsSync(wasmPath)) {
+            return res.json({
+                success: false,
+                error: "Błąd podczas zapisywania pliku WASM"
+            });
+        }
+
+        console.log(`[Server] WASM file uploaded successfully for client ${clientId}:`);
+        console.log(`[Server] WASM: ${wasmPath}`);
+
+        activeCustomFunctions.set(clientId, {
+            active: true,
+            sanitizedId: sanitizedId
+        });
+
+        // Powiadom workerów o dostępności nowego WASM
+        io.of("/worker").emit("custom_wasm_available", {
+            clientId,
+            sanitizedId,
+            timestamp: Date.now()
+        });
+
+        res.json({
+            success: true,
+            message: "Plik WASM przesłany pomyślnie",
+            sanitizedId: sanitizedId
+        });
+
+    } catch (error) {
+        console.error('[Server] Upload error:', error);
+        res.json({
+            success: false,
+            error: "Błąd serwera podczas przetwarzania pliku"
+        });
+    }
+});
+
+function cleanupClientFiles(clientId, tempDir) {
+    const sanitizedId = sanitizeJsIdentifier(clientId);
+    const wasmFile = path.join(tempDir, `${sanitizedId}.wasm`);
+
+    if (fs.existsSync(wasmFile)) {
+        fs.unlinkSync(wasmFile);
+        console.log(`[Server] Removed WASM file: ${wasmFile}`);
+    }
+}
+
+// Endpoint statyczny dla plików temp (aby worker mógł je pobrać)
+app.use('/temp', express.static(tempDir));
 
 async function broadcastWorkerList() {
     const list = Array.from(workers.entries()).map(([id, worker]) => ({
@@ -109,6 +222,8 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
         }
     }
 
+    console.log(`[Server] Distributing tasks for method: ${originalTaskParams.method}, sanitizedId: ${originalTaskParams.sanitizedId}`);
+
     for (const { id, batchSize } of taskCountPerWorker) {
         const queueName = `tasks.worker_${id}`;
         const workerTaskList = workerTasks.get(id) || [];
@@ -146,7 +261,7 @@ async function tryToGiveTasksForWaitingClients() {
             start: 0,
             lastUpdate: 0,
             method: pending.taskParams.method,
-            totalSamples: pending.taskParams.method === 'montecarlo' ? pending.taskParams.samples : null // Corrected: use samples for Monte Carlo
+            totalSamples: pending.taskParams.method === 'custom1D' || pending.taskParams.method === 'custom2D' ? null : pending.taskParams.samples
         });
         await tasksDevider3000(pending.tasks, clientId, pending.workerIds, pending.taskParams);
     }
@@ -183,6 +298,7 @@ async function start() {
             await createQueuePerClient(channel, socket.id, socket);
             broadcastWorkerList();
         });
+
         socket.on("batch_result", (data) => {
             const { clientId, result, tasksCount, method } = data;
             const state = clientStates.get(clientId);
@@ -192,11 +308,6 @@ async function start() {
             if (state.completed === 0) {
                 state.start = Date.now();
                 state.method = method;
-
-                if (method === 'montecarlo') {
-                    state.a = data.a;
-                    state.b = data.b;
-                }
             }
 
             state.sum += result;
@@ -214,13 +325,6 @@ async function start() {
             }
             if (state.completed === state.expected) {
                 let finalResult = state.sum;
-                if (state.method === 'montecarlo') {
-                    if (state.totalSamples && state.totalSamples > 0 && typeof state.a === 'number' && typeof state.b === 'number') {
-                        finalResult = (state.b - state.a) * (state.sum / state.totalSamples);
-                    } else {
-                        finalResult = NaN;
-                    }
-                }
 
                 const clientSocket = clientSockets.get(clientId);
                 if (clientSocket) {
@@ -268,53 +372,10 @@ async function start() {
         clientSockets.set(socket.id, socket);
         broadcastWorkerList();
 
-        socket.on("submit_custom_function", async (data) => {
-            const { functionCode, method } = data;
-            const clientId = socket.id;
-
-            //console.log(`[Client] ${clientId} submitted custom function for method: ${method}`);
-
-            let result;
-            //tu logika tego co kompilujemy
-            if (method === 'montecarlo') {
-                result = await compileMonteCarlo(clientId, functionCode, tempDir);
-            } else if (method === 'trapezoidal') {
-                result = await compileTrapezIntegration(clientId, functionCode, tempDir);
-            } else {
-                socket.emit("custom_function_result", {
-                    success: false,
-                    error: "Invalid method specified for custom function compilation."
-                });
-                return;
-            }
-
-            if (result.success) {
-                activeCustomFunctions.set(clientId, {
-                    active: true,
-                    sanitizedId: result.sanitizedId
-                });
-
-                io.of("/worker").emit("custom_wasm_available", {
-                    clientId,
-                    sanitizedId: result.sanitizedId,
-                    timestamp: Date.now()
-                });
-
-                socket.emit("custom_function_result", {
-                    success: true,
-                    message: "Function compiled successfully",
-                    sanitizedId: result.sanitizedId
-                });
-            } else {
-                socket.emit("custom_function_result", {
-                    success: false,
-                    error: result.error
-                });
-            }
-        });
-
         socket.on("start", async ({ workerIds, taskParams }) => {
             const clientId = socket.id;
+
+            console.log(`[Client] Starting task with method: ${taskParams.method}, sanitizedId: ${taskParams.sanitizedId}`);
 
             const selected = workerIds.filter(id => workers.has(id));
             const tasks = await createTasks(taskParams);
@@ -338,7 +399,7 @@ async function start() {
                     start: 0,
                     lastUpdate: 0,
                     method: taskParams.method,
-                    totalSamples: taskParams.method === 'montecarlo' ? taskParams.samples : null
+                    totalSamples: null
                 });
 
                 await tasksDevider3000(tasks, clientId, selected, taskParams);
@@ -393,7 +454,7 @@ async function start() {
             if (activeCustomFunctions.has(socket.id)) {
                 cleanupClientFiles(socket.id, tempDir);
                 activeCustomFunctions.delete(socket.id);
-                io.of("/worker").emit("unload_custom_wasm", { clientId: socket.id });
+                io.of("/worker").emit("unload_custom_wasm", { clientId: socket.id, sanitizedId: sanitizeJsIdentifier(socket.id) });
             }
         });
     });

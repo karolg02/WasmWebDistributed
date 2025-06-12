@@ -1,14 +1,14 @@
-import React from "react";
-import { CustomParams1D } from "../../types";
-import { Button, Paper, Stack, Textarea, Title, NumberInput, Group, Text, Select } from "@mantine/core";
-import { IconFunction, IconPlayerPlay } from "@tabler/icons-react";
+import React, { useState } from "react";
+import { CustomParams1D, CustomParams2D } from "../../types";
+import { Button, Paper, Stack, Title, NumberInput, Group, Text, FileInput, Alert, ActionIcon } from "@mantine/core";
+import { IconFunction, IconPlayerPlay, IconUpload, IconAlertCircle, IconPlus, IconTrash } from "@tabler/icons-react";
 
 interface CustomFormProps {
-    taskParams: CustomParams1D;
-    setTaskParams: React.Dispatch<React.SetStateAction<CustomParams1D>>;
+    taskParams: CustomParams1D | CustomParams2D;
+    setTaskParams: React.Dispatch<React.SetStateAction<CustomParams1D>> | React.Dispatch<React.SetStateAction<CustomParams2D>>;
     onSubmit: (e: React.FormEvent) => void;
     disabled?: boolean;
-    // compilationResult?: { success: boolean, message?: string, error?: string } | null; // Optional: if you have a similar mechanism for custom WASM
+    is2D: boolean;
 }
 
 export const CustomForm: React.FC<CustomFormProps> = ({
@@ -16,117 +16,224 @@ export const CustomForm: React.FC<CustomFormProps> = ({
     setTaskParams,
     onSubmit,
     disabled,
-    // compilationResult
+    is2D
 }) => {
-
-    // Placeholder for 1D/2D selection if you expand CustomParams
-    // const [dimension, setDimension] = useState<'1D' | '2D'>('1D');
+    const [wasmFile, setWasmFile] = useState<File | null>(null);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     const handleFormSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        // Add any specific validation for the custom form if needed
+
+        if (!wasmFile) {
+            setUploadError("Musisz przesłać plik WASM");
+            return;
+        }
+
+        if (!wasmFile.name.endsWith('.wasm')) {
+            setUploadError("Plik WASM musi mieć rozszerzenie .wasm");
+            return;
+        }
+
+        setUploadError(null);
         onSubmit(e);
     };
+
+    const getParam = (index: number, defaultValue: number = 0): number => {
+        return taskParams.params[index] ?? defaultValue;
+    };
+
+    const updateParam = (index: number, value: number) => {
+        (setTaskParams as any)((prev: any) => {
+            const newParams = [...prev.params];
+            newParams[index] = value;
+            return { ...prev, params: newParams };
+        });
+    };
+
+    const addParam = () => {
+        (setTaskParams as any)((prev: any) => ({
+            ...prev,
+            params: [...prev.params, 0]
+        }));
+    };
+
+    const removeParam = (index: number) => {
+        (setTaskParams as any)((prev: any) => ({
+            ...prev,
+            params: prev.params.filter((_: any, i: number) => i !== index)
+        }));
+    };
+
+    const x1Index = 0;
+    const x2Index = 1;
+    const y1Index = is2D ? 2 : -1;
+    const y2Index = is2D ? 3 : -1;
+    const nIndex = is2D ? 4 : 2;
+    const dxIndex = is2D ? 5 : 3;
+    const dyIndex = is2D ? 6 : -1;
+    const additionalStartIndex = is2D ? 7 : 4;
 
     return (
         <Paper withBorder p="md" radius="md" bg="dark.7" c="white">
             <Title order={4} mb="md">
                 <Group gap="xs">
                     <IconFunction size={20} />
-                    <span>Własne zadanie WASM</span>
+                    <span>Własne zadanie WASM {is2D ? '(2D)' : '(1D)'}</span>
                 </Group>
             </Title>
             <form onSubmit={handleFormSubmit}>
                 <Stack gap="md">
-                    {/* 
-                        TODO: Implement WASM input. This could be:
-                        1. A textarea for pasting WASM code (text format or base64).
-                        2. A file input to upload a .wasm file.
-                        3. An input for an identifier if WASM modules are pre-loaded/registered.
-                        For now, `customFunction` field in `CustomParams1D` will store this.
-                    */}
-                    <Textarea
-                        label="Kod WASM / Identyfikator funkcji"
-                        description="Wklej kod WASM (np. w formacie Base64), tekst WAT/WAST lub podaj identyfikator predefiniowanej funkcji."
-                        value={taskParams.wasmSource}
-                        onChange={(e) => setTaskParams(p => ({ ...p, wasmSource: e.target.value }))}
-                        placeholder="Moduł WASM lub nazwa funkcji..."
-                        minRows={4}
-                        autosize
+                    {uploadError && (
+                        <Alert
+                            icon={<IconAlertCircle size={16} />}
+                            title="Błąd przesyłania"
+                            color="red"
+                            withCloseButton
+                            onClose={() => setUploadError(null)}
+                        >
+                            {uploadError}
+                        </Alert>
+                    )}
+
+                    <FileInput
+                        label="Plik WASM"
+                        description="Przesyłany plik .wasm z skompilowaną funkcją 'main_function'"
+                        placeholder="Wybierz plik .wasm"
+                        accept=".wasm"
+                        value={wasmFile}
+                        onChange={setWasmFile}
+                        leftSection={<IconUpload size={14} />}
                         disabled={disabled}
                         required
                     />
 
-                    {/* 
-                        TODO: Add a selector for 1D/2D tasks if you plan to support both.
-                        <Select
-                            label="Typ zadania (wymiarowość)"
-                            placeholder="Wybierz typ"
-                            data={[
-                                { value: '1D', label: 'Zadanie 1D' },
-                                // { value: '2D', label: 'Zadanie 2D' }, // Uncomment when 2D is ready
-                            ]}
-                            value={dimension} // You would need a 'dimension' state
-                            onChange={(value) => {
-                                // setDimension(value as '1D' | '2D');
-                                // Potentially reset parts of taskParams or switch to a different params object
-                            }}
-                            disabled={disabled}
-                        />
-                    */}
+                    <Text size="sm" c="dimmed">
+                        <strong>Parametry:</strong> {is2D ? '[x1, x2, y1, y2, N, dx, dy, ...dodatkowe]' : '[x1, x2, N, dx, ...dodatkowe]'}
+                    </Text>
 
-                    <Text mt="sm" fw={500}>Parametry dla zadania (1D)</Text>
                     <Group grow>
                         <NumberInput
-                            label="Zakres początkowy (x1)"
-                            value={taskParams.x1}
-                            onChange={(val) => setTaskParams(p => ({ ...p, x1: Number(val) || 0 }))}
+                            label="x1"
+                            value={getParam(x1Index, 0)}
+                            onChange={(val) => updateParam(x1Index, Number(val) || 0)}
                             disabled={disabled}
                             required
                             radius="md"
                         />
                         <NumberInput
-                            label="Zakres końcowy (x2)"
-                            value={taskParams.x2}
-                            onChange={(val) => setTaskParams(p => ({ ...p, x2: Number(val) || 0 }))}
+                            label="x2"
+                            value={getParam(x2Index, 1)}
+                            onChange={(val) => updateParam(x2Index, Number(val) || 1)}
                             disabled={disabled}
                             required
                             radius="md"
                         />
                     </Group>
-                    <NumberInput
-                        label="Krok (dx)"
-                        value={taskParams.dx}
-                        onChange={(val) => setTaskParams(p => ({ ...p, dx: Number(val) || 0.00001 }))}
-                        step={0.00001}
-                        decimalScale={10}
-                        min={0.0000000001}
-                        disabled={disabled}
-                        required
-                        radius="md"
-                    />
+
+                    {is2D && (
+                        <Group grow>
+                            <NumberInput
+                                label="y1"
+                                value={getParam(y1Index, 0)}
+                                onChange={(val) => updateParam(y1Index, Number(val) || 0)}
+                                disabled={disabled}
+                                required
+                                radius="md"
+                            />
+                            <NumberInput
+                                label="y2"
+                                value={getParam(y2Index, 1)}
+                                onChange={(val) => updateParam(y2Index, Number(val) || 1)}
+                                disabled={disabled}
+                                required
+                                radius="md"
+                            />
+                        </Group>
+                    )}
+
+                    <Group grow>
+
+                        <NumberInput
+                            label="dx"
+                            value={getParam(dxIndex, 0.001)}
+                            onChange={(val) => updateParam(dxIndex, Number(val) || 0.001)}
+                            min={0.000000001}
+                            max={100}
+                            step={0.001}
+                            disabled={disabled}
+                            required
+                            radius="md"
+                        />
+                        {is2D && (
+                            <NumberInput
+                                label="dy"
+                                value={getParam(dyIndex, 0.001)}
+                                onChange={(val) => updateParam(dyIndex, Number(val) || 0.001)}
+                                min={0.000001}
+                                step={0.001}
+                                disabled={disabled}
+                                required
+                                radius="md"
+                            />
+                        )}
+                    </Group>
+
                     <NumberInput
                         label="Liczba zadań (N)"
-                        description="Całkowita liczba zadań do podziału między workerów."
-                        value={taskParams.N}
-                        onChange={(val) => setTaskParams(p => ({ ...p, N: Number(val) || 1000 }))}
+                        value={getParam(nIndex, 100)}
+                        onChange={(val) => updateParam(nIndex, Number(val) || 100)}
                         min={1}
+                        max={100000}
                         disabled={disabled}
                         required
                         radius="md"
                     />
 
+                    {/* Dodatkowe parametry */}
+                    <Group justify="space-between">
+                        <Text fw={500}>Dodatkowe parametry</Text>
+                        <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={addParam} disabled={disabled} color="green">
+                            Dodaj
+                        </Button>
+                    </Group>
+
+                    {taskParams.params.length > additionalStartIndex ? (
+                        <Stack gap="sm">
+                            {taskParams.params.slice(additionalStartIndex).map((param, index) => (
+                                <Group key={additionalStartIndex + index} gap="sm">
+                                    <NumberInput
+                                        label={`Parametr ${index + 1}`}
+                                        value={param}
+                                        onChange={(val) => updateParam(additionalStartIndex + index, Number(val) || 0)}
+                                        disabled={disabled}
+                                        radius="md"
+                                        style={{ flex: 1 }}
+                                    />
+                                    <ActionIcon
+                                        color="red"
+                                        variant="light"
+                                        onClick={() => removeParam(additionalStartIndex + index)}
+                                        disabled={disabled}
+                                        mt="xl"
+                                    >
+                                        <IconTrash size={16} />
+                                    </ActionIcon>
+                                </Group>
+                            ))}
+                        </Stack>
+                    ) : (
+                        <Text size="sm" c="dimmed" ta="center">Brak dodatkowych parametrów</Text>
+                    )}
+
                     <Button
                         type="submit"
                         fullWidth
-                        mt="sm"
                         size="md"
-                        disabled={disabled || !taskParams.wasmSource || taskParams.wasmSource.trim() === ""}
+                        disabled={disabled || !wasmFile}
                         leftSection={<IconPlayerPlay size={16} />}
                         color="violet.6"
-                        radius="md"
                     >
-                        Uruchom własne zadanie
+                        Uruchom {is2D ? '2D' : '1D'}
                     </Button>
                 </Stack>
             </form>

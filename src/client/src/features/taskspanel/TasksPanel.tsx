@@ -2,9 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Container, Paper, Title, Text, SimpleGrid, Group, Badge, Alert } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
-import { AllTaskParams, CustomParams1D, TaskParams } from "../types";
-import { IntegrationTaskForm } from "../components/methods/TrapezMethod";
-import { MonteCarloForm } from "../components/methods/MonteCarloForm";
+import { AllTaskParams, CustomParams1D, CustomParams2D } from "../types";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkerCard } from "../components/WorkerCard";
 import { IconAlertTriangle } from "@tabler/icons-react";
@@ -12,46 +10,23 @@ import { CustomForm } from "../components/methods/CustomForm";
 
 export function TasksPanel() {
     const location = useLocation();
-    const initialMethod =
-        location.state?.method === 'montecarlo'
-            ? 'montecarlo'
-            : location.state?.method === 'custom'
-                ? 'custom'
-                : 'trapezoidal';
+    const initialMethod = location.state?.method === 'custom2D' ? 'custom2D' : 'custom1D';
 
-    const [currentMethod] = useState<'trapezoidal' | 'montecarlo' | 'custom'>(initialMethod);
-
+    const [currentMethod] = useState<'custom1D' | 'custom2D'>(initialMethod);
     const [error, setError] = useState<string | null>(null);
 
     const {
-        socket, workers, selectedWorkerIds, setSelectedWorkerIds, progress, result, duration, isCalculating, startTime, queueStatus, startTask, compilingFunction, functionCompilationResultDisplay
+        socket, workers, selectedWorkerIds, setSelectedWorkerIds, progress, result, duration, isCalculating, startTime, queueStatus, startTask
     } = useSocket();
 
     const [customParams1D, setCustomParams1D] = useState<CustomParams1D>({
-        method: 'custom',
-        x1: 0,
-        x2: 1,
-        dx: 0.00001,
-        N: 100000,
-        wasmSource: "" // Renamed from customFunction
+        method: 'custom1D',
+        params: [0, 1, 10000, 0.001],
     });
 
-    const [trapezoidalTaskParams, setTrapezoidalTaskParams] = useState<TaskParams>({
-        method: 'trapezoidal',
-        a: 0,
-        b: 3.14159,
-        dx: 0.00001,
-        N: 100000,
-        customFunction: ""
-    });
-
-    const [monteCarloTaskParams, setMonteCarloTaskParams] = useState<TaskParams>({
-        method: 'montecarlo',
-        a: 0,
-        b: Math.PI,
-        samples: 10000,
-        N: 10000,
-        customFunction: ""
+    const [customParams2D, setCustomParams2D] = useState<CustomParams2D>({
+        method: 'custom2D',
+        params: [0, 1, 0, 1, 10000, 0.001, 0.001],
     });
 
     useEffect(() => {
@@ -69,46 +44,63 @@ export function TasksPanel() {
             return;
         }
 
-        let taskResult;
-        if (currentMethod === "trapezoidal") {
-            if (!trapezoidalTaskParams.customFunction || trapezoidalTaskParams.customFunction.trim() === "") {
-                setError("Ciało funkcji dla metody trapezów nie może być puste.");
-                return;
-            }
-            taskResult = await startTask(trapezoidalTaskParams, selectedWorkerIds);
-        } else if (currentMethod === "montecarlo") {
-            if (!monteCarloTaskParams.customFunction || monteCarloTaskParams.customFunction.trim() === "") {
-                setError("Ciało funkcji dla metody Monte Carlo nie może być puste.");
-                return;
-            }
-            taskResult = await startTask(monteCarloTaskParams, selectedWorkerIds);
-        } else if (currentMethod === "custom") {
-            if (!customParams1D.wasmSource || customParams1D.wasmSource.trim() === "") {
-                setError("Kod WASM lub identyfikator funkcji dla metody własnej nie może być pusty.");
-                return;
-            }
-            // Assuming startTask can handle CustomParams1D.
-            // You might need to adjust startTask in useSocket.ts
-            taskResult = await startTask(customParams1D as AllTaskParams, selectedWorkerIds);
+        const taskParams = currentMethod === 'custom1D' ? customParams1D : customParams2D;
+        const form = e.target as HTMLFormElement;
+        const wasmInput = form.querySelector('input[type="file"][accept=".wasm"]') as HTMLInputElement;
+
+        const selectedWasmFile = wasmInput?.files?.[0];
+
+        if (!selectedWasmFile) {
+            setError("Musisz przesłać plik WASM");
+            return;
         }
 
-        if (taskResult && !taskResult.success) {
-            setError(taskResult.error || "Wystąpił błąd podczas uruchamiania zadania");
+        try {
+            const uploadFormData = new FormData();
+            uploadFormData.append('wasmFile', selectedWasmFile);
+            uploadFormData.append('clientId', socket?.id || '');
+            uploadFormData.append('method', currentMethod);
+
+            console.log('Uploading files:', {
+                wasmFile: selectedWasmFile.name,
+                clientId: socket?.id,
+                method: currentMethod,
+                params: taskParams.params // DEBUG - zobacz jakie parametry są wysyłane
+            });
+
+            const uploadResponse = await fetch(`http://${window.location.hostname}:8080/upload-wasm`, {
+                method: 'POST',
+                body: uploadFormData
+            });
+
+            const uploadResult = await uploadResponse.json();
+            console.log('Upload result:', uploadResult);
+
+            if (!uploadResult.success) {
+                setError(uploadResult.error || "Błąd podczas przesyłania plików");
+                return;
+            }
+
+            const taskParamsWithId = {
+                ...taskParams,
+                sanitizedId: uploadResult.sanitizedId
+            };
+
+            console.log('Final task params:', taskParamsWithId); // DEBUG
+
+            const taskResult = await startTask(taskParamsWithId as AllTaskParams, selectedWorkerIds);
+
+            if (taskResult && !taskResult.success) {
+                setError("Wystąpił błąd podczas uruchamiania zadania");
+            }
+        } catch (error) {
+            setError("Błąd podczas komunikacji z serwerem");
+            console.error('Upload error:', error);
         }
     };
 
     const getCurrentTaskParams = (): AllTaskParams => {
-        switch (currentMethod) {
-            case "trapezoidal":
-                return trapezoidalTaskParams;
-            case "montecarlo":
-                return monteCarloTaskParams;
-            case "custom":
-                return customParams1D;
-            default:
-                // Fallback, though currentMethod is typed and should match one of the cases
-                return trapezoidalTaskParams;
-        }
+        return currentMethod === 'custom1D' ? customParams1D : customParams2D;
     };
 
     return (
@@ -127,69 +119,23 @@ export function TasksPanel() {
                     </Alert>
                 )}
 
-                {/* This top-level conditional rendering of forms might need adjustment
-                    if you want a single form that changes dynamically.
-                    The IIFE below already handles this, so one of these might be redundant
-                    or could be refactored. For now, let's assume the IIFE is the primary one.
-                 */}
-                {/* {currentMethod === "trapezoidal" ? (
-                    <IntegrationTaskForm
-                        taskParams={trapezoidalTaskParams}
-                        setTaskParams={setTrapezoidalTaskParams}
-                        onSubmit={handleSubmit}
-                        disabled={isCalculating || compilingFunction}
-                        compilationResult={functionCompilationResultDisplay} />
-                ) : currentMethod === "montecarlo" ? ( // Added currentMethod check
-                    <MonteCarloForm
-                        taskParams={monteCarloTaskParams}
-                        setTaskParams={setMonteCarloTaskParams}
-                        onSubmit={handleSubmit}
-                        disabled={isCalculating || compilingFunction}
-                        compilationResult={functionCompilationResultDisplay} />
-                ) : ( // Assumes custom if not trapezoidal or montecarlo
+                {currentMethod === 'custom1D' ? (
                     <CustomForm
                         taskParams={customParams1D}
                         setTaskParams={setCustomParams1D}
                         onSubmit={handleSubmit}
-                        disabled={isCalculating || compilingFunction}
-                        // compilationResult={functionCompilationResultDisplay} // Decide if/how compilation feedback applies to custom WASM
+                        disabled={isCalculating}
+                        is2D={false}
                     />
-                } */}
-
-                {(() => {
-                    switch (currentMethod) {
-                        case "trapezoidal":
-                            return (
-                                <IntegrationTaskForm
-                                    taskParams={trapezoidalTaskParams}
-                                    setTaskParams={setTrapezoidalTaskParams}
-                                    onSubmit={handleSubmit}
-                                    disabled={isCalculating || compilingFunction}
-                                    compilationResult={functionCompilationResultDisplay}
-                                />
-                            );
-                        case "montecarlo":
-                            return (
-                                <MonteCarloForm
-                                    taskParams={monteCarloTaskParams}
-                                    setTaskParams={setMonteCarloTaskParams}
-                                    onSubmit={handleSubmit}
-                                    disabled={isCalculating || compilingFunction}
-                                    compilationResult={functionCompilationResultDisplay}
-                                />
-                            );
-                        case "custom":
-                            return (
-                                <CustomForm
-                                    taskParams={customParams1D}
-                                    setTaskParams={setCustomParams1D}
-                                    onSubmit={handleSubmit}
-                                    disabled={isCalculating || compilingFunction}
-                                // compilationResult={functionCompilationResultDisplay} // Consider if this is needed for custom WASM
-                                />
-                            );
-                    }
-                })()}
+                ) : (
+                    <CustomForm
+                        taskParams={customParams2D}
+                        setTaskParams={setCustomParams2D}
+                        onSubmit={handleSubmit}
+                        disabled={isCalculating}
+                        is2D={true}
+                    />
+                )}
 
                 <Title order={3} mt="lg" mb="sm" c="white">
                     <Group gap="xs">
@@ -217,7 +163,7 @@ export function TasksPanel() {
                                     isCurrentClient={isCurrentClient}
                                     queueStatus={workerQueueStatus}
                                     onSelect={() => {
-                                        if (isCalculating || compilingFunction) return;
+                                        if (isCalculating) return;
                                         if (isSelected) {
                                             setSelectedWorkerIds(prev => prev.filter(id => id !== worker.id));
                                         } else {
@@ -236,7 +182,8 @@ export function TasksPanel() {
                     startTime={startTime}
                     result={result}
                     duration={duration}
-                    method={currentMethod} tasksPerSecond={null} />
+                    method={currentMethod}
+                    tasksPerSecond={null} />
             </Paper>
         </Container>
     );
