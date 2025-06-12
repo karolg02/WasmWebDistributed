@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import io from "socket.io-client";
 import { Worker } from "../types/Worker";
-import { Progress, QueueStatus, AllTaskParams } from "../types";
+import { Progress, QueueStatus, AllTaskParams } from "../types/types";
 
 const socket = io(`http://${window.location.hostname}:8080/client`);
 

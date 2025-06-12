@@ -2,7 +2,7 @@ import React from "react";
 import { Card, Group, Stack, Text, Badge } from "@mantine/core";
 import { IconBrandChrome, IconBrandFirefox, IconBrandSafari, IconWorldWww } from "@tabler/icons-react";
 import { Worker } from "../types/Worker";
-import { QueueStatus } from "../types";
+import { QueueStatus } from "../types/types";
 import { getWorkerStatus } from "../utils/workerStatus";
 
 interface WorkerCardProps {

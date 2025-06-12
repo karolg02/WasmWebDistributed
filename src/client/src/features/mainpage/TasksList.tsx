@@ -21,7 +21,7 @@ export function TasksList() {
     const tasks: Task[] = [
         {
             id: 1,
-            name: "Zadanie Custom 1D",
+            name: "WASM 1D",
             description: "Stwórz własne zadanie obliczeniowe w jednowymiarowej przestrzeni używając kodu WASM.",
             image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
             badge: "1D",
@@ -30,7 +30,7 @@ export function TasksList() {
         },
         {
             id: 2,
-            name: "Zadanie Custom 2D",
+            name: "WASM 2D",
             description: "Stwórz własne zadanie obliczeniowe w dwuwymiarowej przestrzeni używając kodu WASM.",
             image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3",
             badge: "2D",
@@ -45,7 +45,7 @@ export function TasksList() {
 
     return (
         <>
-            <Title order={1} mb="lg" c="#82c91e">Dostępne zadania obliczeniowe</Title>
+            <Title order={1} mb="xl" c="#82c91e">Dostępne tryby obliczeniowe</Title>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
                 {tasks.map((task) => (
                     <Card

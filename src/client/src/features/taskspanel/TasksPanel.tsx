@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Container, Paper, Title, Text, SimpleGrid, Group, Badge, Alert } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
-import { AllTaskParams, CustomParams1D, CustomParams2D } from "../types";
+import { AllTaskParams, CustomParams1D, CustomParams2D } from "../types/types";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkerCard } from "../components/WorkerCard";
 import { IconAlertTriangle } from "@tabler/icons-react";

@@ -1,4 +1,4 @@
-import { QueueStatus, WorkerStatus } from "../types/index";
+import { QueueStatus, WorkerStatus } from "../types/types";
 
 export const getWorkerStatus = (
     workerStatus: QueueStatus[string],

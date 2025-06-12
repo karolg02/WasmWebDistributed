@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CustomParams1D, CustomParams2D } from "../../types";
+import { CustomParams1D, CustomParams2D } from "../../types/types";
 import { Button, Paper, Stack, Title, NumberInput, Group, Text, FileInput, Alert, ActionIcon } from "@mantine/core";
 import { IconFunction, IconPlayerPlay, IconUpload, IconAlertCircle, IconPlus, IconTrash } from "@tabler/icons-react";
 
@@ -78,7 +78,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
             <Title order={4} mb="md">
                 <Group gap="xs">
                     <IconFunction size={20} />
-                    <span>Własne zadanie WASM {is2D ? '(2D)' : '(1D)'}</span>
+                    <span>WASM {is2D ? '(2D)' : '(1D)'}</span>
                 </Group>
             </Title>
             <form onSubmit={handleFormSubmit}>
@@ -108,7 +108,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                     />
 
                     <Text size="sm" c="dimmed">
-                        <strong>Parametry:</strong> {is2D ? '[x1, x2, y1, y2, N, dx, dy, ...dodatkowe]' : '[x1, x2, N, dx, ...dodatkowe]'}
+                        <strong>Parametry:</strong> {is2D ? '[x1, x2, y1, y2, dx, dy, ...dodatkowe]' : '[x1, x2, dx, ...dodatkowe]'}
                     </Text>
 
                     <Group grow>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Transition, Center } from "@mantine/core";
 import { IconClockHour4, IconCheck, IconCalculator, IconHourglass } from "@tabler/icons-react";
-import { Progress as ProgressType } from "../types";
+import { Progress as ProgressType } from "../types/types";
 import { formatTime } from "../utils/formatTime";
 
 interface ResultsPanelProps {

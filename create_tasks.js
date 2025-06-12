@@ -56,7 +56,7 @@ function createCustom2DTasks(taskParams) {
                 d: d,
                 dx: dx,
                 dy: dy,
-                paramsArray: [a, b, c, d, dx, dy, taskId, ...additionalParams]
+                paramsArray: [a, b, c, d, dx, dy, ...additionalParams]
             });
             taskId++;
         }
