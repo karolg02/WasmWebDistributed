@@ -22,6 +22,7 @@ export interface QueueStatus {
         queueLength: number;
         currentClient: string | null;
         isAvailable: boolean;
+        isCalculating: boolean;
     };
 }
 

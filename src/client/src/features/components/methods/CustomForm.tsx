@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { CustomParams1D, CustomParams2D } from "../../types";
-import { Button, Paper, Stack, Title, NumberInput, Group, Text, FileInput, Alert, ActionIcon } from "@mantine/core";
+import { CustomParams1D, CustomParams2D } from "../../types/types";
+import { Button, Paper, Stack, Title, NumberInput, Group, Text, FileInput, Alert, ActionIcon, Box, SimpleGrid } from "@mantine/core";
 import { IconFunction, IconPlayerPlay, IconUpload, IconAlertCircle, IconPlus, IconTrash } from "@tabler/icons-react";
 
 interface CustomFormProps {
@@ -45,6 +45,9 @@ export const CustomForm: React.FC<CustomFormProps> = ({
     const updateParam = (index: number, value: number) => {
         (setTaskParams as any)((prev: any) => {
             const newParams = [...prev.params];
+            while (newParams.length <= index) {
+                newParams.push(0);
+            }
             newParams[index] = value;
             return { ...prev, params: newParams };
         });
@@ -69,20 +72,21 @@ export const CustomForm: React.FC<CustomFormProps> = ({
     const y1Index = is2D ? 2 : -1;
     const y2Index = is2D ? 3 : -1;
     const nIndex = is2D ? 4 : 2;
-    const dxIndex = is2D ? 5 : 3;
-    const dyIndex = is2D ? 6 : -1;
-    const additionalStartIndex = is2D ? 7 : 4;
+
+    const additionalStartIndex = is2D ? 5 : 3;
 
     return (
-        <Paper withBorder p="md" radius="md" bg="dark.7" c="white">
-            <Title order={4} mb="md">
-                <Group gap="xs">
-                    <IconFunction size={20} />
-                    <span>Własne zadanie WASM {is2D ? '(2D)' : '(1D)'}</span>
-                </Group>
-            </Title>
+        <Paper
+            p="xl"
+            radius="xl"
+            style={{
+                background: 'rgba(26, 27, 30, 0.6)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+            }}
+        >
             <form onSubmit={handleFormSubmit}>
-                <Stack gap="md">
+                <Stack gap="lg">
                     {uploadError && (
                         <Alert
                             icon={<IconAlertCircle size={16} />}
@@ -90,6 +94,10 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             color="red"
                             withCloseButton
                             onClose={() => setUploadError(null)}
+                            style={{
+                                background: 'rgba(255, 107, 107, 0.1)',
+                                border: '1px solid rgba(255, 107, 107, 0.3)',
+                            }}
                         >
                             {uploadError}
                         </Alert>
@@ -105,11 +113,30 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         leftSection={<IconUpload size={14} />}
                         disabled={disabled}
                         required
+                        styles={{
+                            input: {
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                color: 'white',
+                                '&::placeholder': { color: 'rgba(255, 255, 255, 0.5)' }
+                            },
+                            label: { color: 'white', fontWeight: 500 },
+                            description: { color: 'rgba(255, 255, 255, 0.7)' }
+                        }}
                     />
 
-                    <Text size="sm" c="dimmed">
-                        <strong>Parametry:</strong> {is2D ? '[x1, x2, y1, y2, N, dx, dy, ...dodatkowe]' : '[x1, x2, N, dx, ...dodatkowe]'}
-                    </Text>
+                    <Box
+                        p="md"
+                        style={{
+                            background: 'rgba(121, 80, 242, 0.1)',
+                            border: '1px solid rgba(121, 80, 242, 0.3)',
+                            borderRadius: '8px'
+                        }}
+                    >
+                        <Text size="sm" c="rgba(255, 255, 255, 0.9)" fw={500}>
+                            <strong>Format parametrów:</strong> {is2D ? '[x1, x2, y1, y2, ...dodatkowe]' : '[x1, x2, ...dodatkowe]'}
+                        </Text>
+                    </Box>
 
                     <Group grow>
                         <NumberInput
@@ -119,6 +146,14 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             disabled={disabled}
                             required
                             radius="md"
+                            styles={{
+                                input: {
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    color: 'white'
+                                },
+                                label: { color: 'white', fontWeight: 500 }
+                            }}
                         />
                         <NumberInput
                             label="x2"
@@ -127,6 +162,14 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             disabled={disabled}
                             required
                             radius="md"
+                            styles={{
+                                input: {
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    color: 'white'
+                                },
+                                label: { color: 'white', fontWeight: 500 }
+                            }}
                         />
                     </Group>
 
@@ -139,6 +182,14 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                 disabled={disabled}
                                 required
                                 radius="md"
+                                styles={{
+                                    input: {
+                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        color: 'white'
+                                    },
+                                    label: { color: 'white', fontWeight: 500 }
+                                }}
                             />
                             <NumberInput
                                 label="y2"
@@ -147,36 +198,17 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                 disabled={disabled}
                                 required
                                 radius="md"
+                                styles={{
+                                    input: {
+                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        color: 'white'
+                                    },
+                                    label: { color: 'white', fontWeight: 500 }
+                                }}
                             />
                         </Group>
                     )}
-
-                    <Group grow>
-
-                        <NumberInput
-                            label="dx"
-                            value={getParam(dxIndex, 0.001)}
-                            onChange={(val) => updateParam(dxIndex, Number(val) || 0.001)}
-                            min={0.000000001}
-                            max={100}
-                            step={0.001}
-                            disabled={disabled}
-                            required
-                            radius="md"
-                        />
-                        {is2D && (
-                            <NumberInput
-                                label="dy"
-                                value={getParam(dyIndex, 0.001)}
-                                onChange={(val) => updateParam(dyIndex, Number(val) || 0.001)}
-                                min={0.000001}
-                                step={0.001}
-                                disabled={disabled}
-                                required
-                                radius="md"
-                            />
-                        )}
-                    </Group>
 
                     <NumberInput
                         label="Liczba zadań (N)"
@@ -187,18 +219,37 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         disabled={disabled}
                         required
                         radius="md"
+                        styles={{
+                            input: {
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                color: 'white'
+                            },
+                            label: { color: 'white', fontWeight: 500 }
+                        }}
                     />
 
-                    {/* Dodatkowe parametry */}
                     <Group justify="space-between">
-                        <Text fw={500}>Dodatkowe parametry</Text>
-                        <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={addParam} disabled={disabled} color="green">
+                        <Text fw={500} c="white">Dodatkowe parametry</Text>
+                        <Button
+                            size="xs"
+                            variant="light"
+                            leftSection={<IconPlus size={14} />}
+                            onClick={addParam}
+                            disabled={disabled}
+                            radius="md"
+                            style={{
+                                background: 'linear-gradient(45deg, rgba(121, 80, 242, 0.2), rgba(151, 117, 250, 0.2))',
+                                border: '1px solid rgba(121, 80, 242, 0.3)',
+                                color: 'white'
+                            }}
+                        >
                             Dodaj
                         </Button>
                     </Group>
 
                     {taskParams.params.length > additionalStartIndex ? (
-                        <Stack gap="sm">
+                        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
                             {taskParams.params.slice(additionalStartIndex).map((param, index) => (
                                 <Group key={additionalStartIndex + index} gap="sm">
                                     <NumberInput
@@ -207,7 +258,16 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                         onChange={(val) => updateParam(additionalStartIndex + index, Number(val) || 0)}
                                         disabled={disabled}
                                         radius="md"
+                                        step={0.001}
                                         style={{ flex: 1 }}
+                                        styles={{
+                                            input: {
+                                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                color: 'white'
+                                            },
+                                            label: { color: 'white', fontWeight: 500 }
+                                        }}
                                     />
                                     <ActionIcon
                                         color="red"
@@ -215,25 +275,42 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                         onClick={() => removeParam(additionalStartIndex + index)}
                                         disabled={disabled}
                                         mt="xl"
+                                        style={{
+                                            background: 'rgba(255, 107, 107, 0.1)',
+                                            border: '1px solid rgba(255, 107, 107, 0.3)',
+                                        }}
                                     >
                                         <IconTrash size={16} />
                                     </ActionIcon>
                                 </Group>
                             ))}
-                        </Stack>
+                        </SimpleGrid>
                     ) : (
-                        <Text size="sm" c="dimmed" ta="center">Brak dodatkowych parametrów</Text>
+                        <Text size="sm" c="rgba(255, 255, 255, 0.5)" ta="center" py="md">
+                            Brak dodatkowych parametrów
+                        </Text>
                     )}
 
                     <Button
                         type="submit"
+                        radius="lg"
                         fullWidth
-                        size="md"
+                        size="lg"
                         disabled={disabled || !wasmFile}
                         leftSection={<IconPlayerPlay size={16} />}
-                        color="violet.6"
+                        style={{
+                            background: disabled || !wasmFile ?
+                                'rgba(255, 255, 255, 0.1)' :
+                                'linear-gradient(45deg, #7950f2, #9775fa)',
+                            border: 'none',
+                            transition: 'all 0.3s ease',
+                            '&:hover': !disabled && wasmFile ? {
+                                transform: 'translateY(-2px)',
+                                boxShadow: '0 8px 25px rgba(121, 80, 242, 0.4)',
+                            } : {}
+                        }}
                     >
-                        Uruchom {is2D ? '2D' : '1D'}
+                        Uruchom zadanie {is2D ? '2D' : '1D'}
                     </Button>
                 </Stack>
             </form>

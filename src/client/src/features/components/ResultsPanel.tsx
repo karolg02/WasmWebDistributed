@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Transition, Center } from "@mantine/core";
-import { IconClockHour4, IconCheck, IconCalculator, IconHourglass } from "@tabler/icons-react";
-import { Progress as ProgressType } from "../types";
+import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Transition, Center, Box } from "@mantine/core";
+import { IconClockHour4, IconCheck, IconCalculator, IconHourglass, IconTrendingUp } from "@tabler/icons-react";
+import { Progress as ProgressType } from "../types/types";
 import { formatTime } from "../utils/formatTime";
 
 interface ResultsPanelProps {
@@ -48,7 +48,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     }, [isCalculating]);
 
     const totalTasks = getTotalTasks();
-
     const progressPercentage = totalTasks > 0 ? (progress.done / totalTasks) * 100 : 0;
 
     useEffect(() => {
@@ -112,17 +111,35 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
             >
                 {(styles) => (
                     <Paper
-                        withBorder
-                        radius="md"
-                        p="md"
-                        style={{ ...styles, overflow: 'hidden' }}
-                        bg="dark.7"
+                        radius="xl"
+                        p="xl"
                         mb="lg"
+                        style={{
+                            ...styles,
+                            background: 'rgba(26, 27, 30, 0.6)',
+                            backdropFilter: 'blur(20px)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            overflow: 'hidden'
+                        }}
                     >
-                        <Stack gap="md">
+                        <Stack gap="lg">
                             <Group justify="space-between" mb="xs">
-                                <Text size="md" fw={500} c="#82c91e">Trwa obliczanie...</Text>
-                                <Text size="sm" c="#82c91e">
+                                <Group gap="sm">
+                                    <Box
+                                        style={{
+                                            background: 'linear-gradient(45deg, #7950f2, #9775fa)',
+                                            borderRadius: '12px',
+                                            padding: '8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >
+                                        <IconTrendingUp size={20} color="white" />
+                                    </Box>
+                                    <Text size="lg" fw={600} c="white">Trwa obliczanie...</Text>
+                                </Group>
+                                <Text size="md" fw={600} c="#7950f2">
                                     {progressPercentage.toFixed(1)}%
                                 </Text>
                             </Group>
@@ -131,31 +148,40 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                 value={progressPercentage}
                                 size="xl"
                                 radius="xl"
-                                striped
-                                animated
-                                color="#9775fa"
+                                style={{
+                                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                                }}
+                                styles={{
+                                    section: {
+                                        background: 'linear-gradient(45deg, #7950f2, #9775fa)',
+                                    }
+                                }}
                             />
 
                             <Group justify="space-between" align="center">
-                                <Text size="md" c="dimmed">
-                                    <IconClockHour4 size={14} color="#5C5F66" style={{ marginRight: "4px" }} />
-                                    Czas wykonywania: {getElapsedTimeText()}
-                                </Text>
-                                <Text size="md" c="dimmed">
-                                    <IconHourglass size={14} color="#5C5F66" style={{ marginRight: "4px" }} />
-                                    Pozostało: {getRemainingTimeText()}
-                                </Text>
+                                <Group gap="xs">
+                                    <IconClockHour4 size={16} color="#7950f2" />
+                                    <Text size="sm" c="rgba(255, 255, 255, 0.8)">
+                                        Czas: {getElapsedTimeText()}
+                                    </Text>
+                                </Group>
+                                <Group gap="xs">
+                                    <IconHourglass size={16} color="#7950f2" />
+                                    <Text size="sm" c="rgba(255, 255, 255, 0.8)">
+                                        Pozostało: {getRemainingTimeText()}
+                                    </Text>
+                                </Group>
                             </Group>
 
                             <Group justify="center">
-                                <Text ta="center" size="sm" c="white">
+                                <Text ta="center" size="sm" c="rgba(255, 255, 255, 0.8)">
                                     {getProgressText()}
                                 </Text>
                             </Group>
                         </Stack>
                     </Paper>
                 )}
-            </Transition >
+            </Transition>
 
             <Transition
                 mounted={!isCalculating && result !== null}
@@ -165,38 +191,59 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                 exitDuration={200}
             >
                 {(styles) => (
-                    <>
-                        <Card
-                            withBorder
-                            radius="md"
-                            p="lg"
-                            style={{ ...styles }}
-                            bg="dark.7"
-                        >
-                            <Group justify="space-between" align="flex-start">
-                                <Stack gap="xs">
-                                    <Text size="lg" fw={700} c="#9775fa" >Wynik końcowy</Text>
-                                    <Text size="xl" fw={500} c="#82c91e" style={{ fontFamily: 'monospace' }}>
-                                        {result !== null ? result.toFixed(6) : "-"}
-                                    </Text>
-                                    <Group>
-                                        <IconCalculator size={16} color="#5C5F66" />
-                                        <Text size="sm" c="dimmed">
-                                            Czas obliczeń: {formatDuration(duration)}
-                                        </Text>
-                                    </Group>
-                                </Stack>
+                    <Card
+                        radius="xl"
+                        p="xl"
+                        style={{
+                            ...styles,
+                            background: 'rgba(26, 27, 30, 0.6)',
+                            backdropFilter: 'blur(20px)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                        }}
+                    >
+                        <Group justify="space-between" align="flex-start">
+                            <Stack gap="md">
+                                <Group gap="sm">
+                                    <Box
+                                        style={{
+                                            background: 'linear-gradient(45deg, #7950f2, #9775fa)',
+                                            borderRadius: '12px',
+                                            padding: '8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >
+                                        <IconCalculator size={20} color="white" />
+                                    </Box>
+                                    <Text size="lg" fw={600} c="white">Wynik końcowy</Text>
+                                </Group>
 
-                                <RingProgress
-                                    sections={[{ value: 100, color: '#7950f2' }]}
-                                    size={80}
-                                    thickness={8}
-                                    roundCaps
-                                    label={<Center>
-                                        <IconCheck style={{ width: 24, height: 24 }} color="#82c91e" />
-                                    </Center>} />
-                            </Group>
-                        </Card></>
+                                <Text size="2rem" fw={700} c="#7950f2" style={{ fontFamily: 'monospace' }}>
+                                    {result !== null ? result.toFixed(6) : "-"}
+                                </Text>
+
+                                <Group gap="xs">
+                                    <IconClockHour4 size={16} color="#7950f2" />
+                                    <Text size="sm" c="rgba(255, 255, 255, 0.8)">
+                                        Czas obliczeń: {formatDuration(duration)}
+                                    </Text>
+                                </Group>
+                            </Stack>
+
+                            <RingProgress
+                                sections={[{ value: 100, color: '#7950f2' }]}
+                                size={80}
+                                thickness={8}
+                                roundCaps
+                                label={
+                                    <Center>
+                                        <IconCheck style={{ width: 24, height: 24 }} color="#7950f2" />
+                                    </Center>
+                                }
+                            />
+                        </Group>
+                    </Card>
                 )}
             </Transition>
         </>
