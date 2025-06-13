@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Container, Paper, Title, Text, SimpleGrid, Group, Badge, Alert } from "@mantine/core";
+import { Container, Paper, Title, Text, SimpleGrid, Group, Badge, Alert, Box } from "@mantine/core";
 import { useSocket } from "../hooks/useSocket";
 import { AllTaskParams, CustomParams1D, CustomParams2D } from "../types/types";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkerCard } from "../components/WorkerCard";
-import { IconAlertTriangle } from "@tabler/icons-react";
+import { IconAlertTriangle, IconCpu } from "@tabler/icons-react";
 import { CustomForm } from "../components/methods/CustomForm";
 
 export function TasksPanel() {
@@ -61,20 +61,12 @@ export function TasksPanel() {
             uploadFormData.append('clientId', socket?.id || '');
             uploadFormData.append('method', currentMethod);
 
-            console.log('Uploading files:', {
-                wasmFile: selectedWasmFile.name,
-                clientId: socket?.id,
-                method: currentMethod,
-                params: taskParams.params // DEBUG - zobacz jakie parametry są wysyłane
-            });
-
             const uploadResponse = await fetch(`http://${window.location.hostname}:8080/upload-wasm`, {
                 method: 'POST',
                 body: uploadFormData
             });
 
             const uploadResult = await uploadResponse.json();
-            console.log('Upload result:', uploadResult);
 
             if (!uploadResult.success) {
                 setError(uploadResult.error || "Błąd podczas przesyłania plików");
@@ -85,8 +77,6 @@ export function TasksPanel() {
                 ...taskParams,
                 sanitizedId: uploadResult.sanitizedId
             };
-
-            console.log('Final task params:', taskParamsWithId); // DEBUG
 
             const taskResult = await startTask(taskParamsWithId as AllTaskParams, selectedWorkerIds);
 
@@ -104,16 +94,61 @@ export function TasksPanel() {
     };
 
     return (
-        <Container size="lg" py="xl">
-            <Paper bg="dark.8">
+        <Container size="lg" py="xl" className="fade-in">
+            <Box mb="xl" ta="center">
+                <Box
+                    style={{
+                        background: 'linear-gradient(45deg, #7950f2, #9775fa)',
+                        borderRadius: '50%',
+                        padding: '16px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '20px',
+                        boxShadow: '0 8px 32px rgba(121, 80, 242, 0.4)',
+                    }}
+                >
+                    <IconCpu size={32} color="white" />
+                </Box>
+                <Title
+                    order={1}
+                    size="2.5rem"
+                    mb="md"
+                    style={{
+                        background: 'linear-gradient(45deg, #7950f2, #9775fa)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        backgroundClip: 'text',
+                    }}
+                >
+                    Panel Zadań {currentMethod === 'custom2D' ? '2D' : '1D'}
+                </Title>
+                <Text size="lg" c="rgba(255, 255, 255, 0.8)">
+                    Skonfiguruj i uruchom swoje zadanie obliczeniowe
+                </Text>
+            </Box>
+
+            <Paper
+                style={{
+                    background: 'rgba(26, 27, 30, 0.6)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+                p="xl"
+                radius="xl"
+            >
                 {error && (
                     <Alert
                         icon={<IconAlertTriangle size={16} />}
                         title="Błąd"
                         color="red"
-                        mb="md"
+                        mb="xl"
                         withCloseButton
                         onClose={() => setError(null)}
+                        style={{
+                            background: 'rgba(255, 107, 107, 0.1)',
+                            border: '1px solid rgba(255, 107, 107, 0.3)',
+                        }}
                     >
                         {error}
                     </Alert>
@@ -137,43 +172,67 @@ export function TasksPanel() {
                     />
                 )}
 
-                <Title order={3} mt="lg" mb="sm" c="white">
-                    <Group gap="xs">
-                        <Text span>Aktywne przeglądarki</Text>
-                        <Badge color="#7950f2" radius="sm">{workers.length}</Badge>
+                <Box mt="xl">
+                    <Group justify="space-between" mb="lg">
+                        <Title order={3} c="white">
+                            <Group gap="xs">
+                                <IconCpu size={24} color="#7950f2" />
+                                <Text span>Aktywne przeglądarki</Text>
+                            </Group>
+                        </Title>
+                        <Badge
+                            size="lg"
+                            style={{
+                                background: 'linear-gradient(45deg, #7950f2, #9775fa)',
+                                color: 'white'
+                            }}
+                        >
+                            {workers.length}
+                        </Badge>
                     </Group>
-                </Title>
 
-                {workers.length === 0 ? (
-                    <Paper withBorder p="md" radius="md" bg="dark.7">
-                        <Text c="dimmed" ta="center">Brak dostępnych workerów. Otwórz stronę workera w nowej przeglądarce.</Text>
-                    </Paper>
-                ) : (
-                    <SimpleGrid cols={{ base: 2, xs: 1, sm: 2, md: 2 }} spacing="sm" mb="sm">
-                        {workers.map(worker => {
-                            const isSelected = selectedWorkerIds.includes(worker.id);
-                            const workerQueueStatus = queueStatus ? queueStatus[worker.id] : null;
-                            const isCurrentClient = workerQueueStatus?.currentClient === socket?.id;
+                    {workers.length === 0 ? (
+                        <Paper
+                            p="xl"
+                            radius="lg"
+                            style={{
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                textAlign: 'center'
+                            }}
+                        >
+                            <Text c="rgba(255, 255, 255, 0.7)" size="lg">
+                                Brak dostępnych workerów. Otwórz stronę workera w nowej przeglądarce.
+                            </Text>
+                        </Paper>
+                    ) : (
+                        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg" mb="xl">
+                            {workers.map(worker => {
+                                const isSelected = selectedWorkerIds.includes(worker.id);
+                                const workerQueueStatus = queueStatus ? queueStatus[worker.id] : null;
+                                const isCurrentClient = workerQueueStatus?.currentClient === socket?.id;
 
-                            return (
-                                <WorkerCard
-                                    key={worker.id}
-                                    worker={worker}
-                                    selected={isSelected}
-                                    isCurrentClient={isCurrentClient}
-                                    queueStatus={workerQueueStatus}
-                                    onSelect={() => {
-                                        if (isCalculating) return;
-                                        if (isSelected) {
-                                            setSelectedWorkerIds(prev => prev.filter(id => id !== worker.id));
-                                        } else {
-                                            setSelectedWorkerIds(prev => [...prev, worker.id]);
-                                        }
-                                    }} />
-                            );
-                        })}
-                    </SimpleGrid>
-                )}
+                                return (
+                                    <WorkerCard
+                                        key={worker.id}
+                                        worker={worker}
+                                        selected={isSelected}
+                                        isCurrentClient={isCurrentClient}
+                                        queueStatus={workerQueueStatus}
+                                        onSelect={() => {
+                                            if (isCalculating) return;
+                                            if (isSelected) {
+                                                setSelectedWorkerIds(prev => prev.filter(id => id !== worker.id));
+                                            } else {
+                                                setSelectedWorkerIds(prev => [...prev, worker.id]);
+                                            }
+                                        }}
+                                    />
+                                );
+                            })}
+                        </SimpleGrid>
+                    )}
+                </Box>
 
                 <ResultsPanel
                     isCalculating={isCalculating}
@@ -183,7 +242,8 @@ export function TasksPanel() {
                     result={result}
                     duration={duration}
                     method={currentMethod}
-                    tasksPerSecond={null} />
+                    tasksPerSecond={null}
+                />
             </Paper>
         </Container>
     );

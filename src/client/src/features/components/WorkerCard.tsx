@@ -1,6 +1,14 @@
 import React from "react";
-import { Card, Group, Stack, Text, Badge } from "@mantine/core";
-import { IconBrandChrome, IconBrandFirefox, IconBrandSafari, IconWorldWww } from "@tabler/icons-react";
+import { Card, Group, Text, Badge, Stack, Progress, Box } from "@mantine/core";
+import {
+    IconBrandChrome,
+    IconBrandFirefox,
+    IconBrandSafari,
+    IconWorldWww,
+    IconCpu,
+    IconCheck,
+    IconClock
+} from "@tabler/icons-react";
 import { Worker } from "../types/Worker";
 import { QueueStatus } from "../types/types";
 import { getWorkerStatus } from "../utils/workerStatus";
@@ -21,68 +29,131 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
     onSelect
 }) => {
     const getBrowserIcon = (idOrName: string) => {
-        if (idOrName.toLowerCase().includes("chrome")) return <IconBrandChrome size={20} />;
-        if (idOrName.toLowerCase().includes("firefox")) return <IconBrandFirefox size={20} />;
-        if (idOrName.toLowerCase().includes("safari")) return <IconBrandSafari size={20} />;
-        return <IconWorldWww size={20} />;
+        if (idOrName.toLowerCase().includes("chrome")) return <IconBrandChrome size={20} color="white" />;
+        if (idOrName.toLowerCase().includes("firefox")) return <IconBrandFirefox size={20} color="white" />;
+        if (idOrName.toLowerCase().includes("safari")) return <IconBrandSafari size={20} color="white" />;
+        return <IconWorldWww size={20} color="white" />;
     };
 
     const status = getWorkerStatus(queueStatus || { queueLength: 0, currentClient: null, isAvailable: false }, isCurrentClient);
 
     return (
         <Card
-            shadow="lg"
-            padding="md"
-            radius="md"
-            withBorder
-            bg={selected ? "dark.6" : "dark.7"}
+            shadow="xl"
+            padding="xl"
+            radius="xl"
+            onClick={onSelect}
             style={{
                 cursor: "pointer",
-                opacity: queueStatus?.currentClient && !isCurrentClient ? 0.7 : 1,
-                transition: "all 0.2s ease",
-                borderColor: selected ? "#7950f2" : undefined,
-                borderWidth: selected ? "2px" : "2px",
-                marginBottom: "10px"
+                background: selected ?
+                    'rgba(121, 80, 242, 0.15)' :
+                    'rgba(26, 27, 30, 0.6)',
+                backdropFilter: 'blur(20px)',
+                border: selected ?
+                    '2px solid #7950f2' :
+                    '1px solid rgba(255, 255, 255, 0.1)',
+                opacity: queueStatus?.currentClient && !isCurrentClient ? 0.6 : 1,
+                transition: 'all 0.4s ease',
+                transform: selected ? 'translateY(-5px) scale(1.02)' : 'none',
+                boxShadow: selected ?
+                    '0 15px 40px rgba(121, 80, 242, 0.3), 0 0 30px rgba(255, 255, 255, 0.1)' :
+                    '0 8px 32px rgba(0, 0, 0, 0.3)',
             }}
-            onClick={onSelect}
         >
-            <Group justify="space-between" align="flex-start">
-                <Group gap="xs">
-                    {getBrowserIcon(worker.specs.userAgent)}
+            <Group justify="space-between" align="flex-start" mb="md">
+                <Group gap="sm">
+                    <Box
+                        style={{
+                            background: 'linear-gradient(45deg, #7950f2, #9775fa)',
+                            borderRadius: '12px',
+                            padding: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                    >
+                        {getBrowserIcon(worker.specs.userAgent)}
+                    </Box>
                     <Stack gap={2}>
-                        <Text size="sm" fw={500} c="white">
+                        <Text fw={600} size="sm" c="white">
                             {worker.name || worker.id}
                         </Text>
-                        <Text size="xs" c="dimmed">
+                        <Text size="xs" c="rgba(255, 255, 255, 0.7)">
                             {worker.specs.platform}
                         </Text>
-                        <Group gap={5}>
-                            <Badge
-                                color={status.color === "green" ? "#82c91e" :
-                                    status.color === "red" ? "red" :
-                                        status.color === "orange" ? "orange" : "gray"}
-                                variant="light"
-                                size="xs"
-                            >
-                                {status.message}
-                            </Badge>
-                            {status.badge && (
-                                <Text size="xs" c="dimmed">
-                                    ({status.badge})
-                                </Text>
-                            )}
-                        </Group>
                     </Stack>
                 </Group>
-                <Stack gap={2} align="flex-end">
-                    <Text size="xs" c="dimmed">
-                        CPU: {worker.specs.hardwareConcurrency} cores
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                        Score: <Text span c="#82c91e" fw={500}>{worker.performance.benchmarkScore.toFixed(2)}</Text>
-                    </Text>
-                </Stack>
+
+                <Badge
+                    size="sm"
+                    style={{
+                        backgroundColor: status.color === "green" ? "#40c057" :
+                            status.color === "red" ? "#ff6b6b" :
+                                status.color === "orange" ? "#ff9500" : "#6c757d",
+                        color: 'white'
+                    }}
+                >
+                    {selected && <IconCheck size={12} style={{ marginRight: '4px' }} />}
+                    {status.message}
+                </Badge>
             </Group>
+
+            <Stack gap="sm">
+                <Group justify="space-between">
+                    <Group gap="xs">
+                        <IconCpu size={16} color="#7950f2" />
+                        <Text size="xs" c="rgba(255, 255, 255, 0.8)">CPU</Text>
+                    </Group>
+                    <Text size="xs" fw={600} c="white">
+                        {worker.specs.hardwareConcurrency} cores
+                    </Text>
+                </Group>
+
+                <Group justify="space-between">
+                    <Group gap="xs">
+                        <Text size="xs" c="rgba(255, 255, 255, 0.8)">Wydajność</Text>
+                    </Group>
+                    <Text size="xs" fw={600} c="white">
+                        {worker.performance.benchmarkScore.toFixed(2)} ops/sec
+                    </Text>
+                </Group>
+
+                <Progress
+                    value={Math.min((worker.performance.benchmarkScore / 10000) * 100, 100)}
+                    size="sm"
+                    style={{
+                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    }}
+                    styles={{
+                        section: {
+                            background: 'linear-gradient(45deg, #7950f2, #9775fa)',
+                        }
+                    }}
+                />
+
+                {status.badge && (
+                    <Group justify="space-between">
+                        <Group gap="xs">
+                            <IconClock size={16} color="#ff9500" />
+                            <Text size="xs" c="rgba(255, 255, 255, 0.8)">Info</Text>
+                        </Group>
+                        <Badge size="xs" color="orange">
+                            {status.badge}
+                        </Badge>
+                    </Group>
+                )}
+            </Stack>
+
+            {selected && (
+                <Box
+                    mt="md"
+                    style={{
+                        height: '3px',
+                        background: 'linear-gradient(90deg, #7950f2, #9775fa)',
+                        borderRadius: '2px',
+                    }}
+                />
+            )}
         </Card>
     );
 };

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { CustomParams1D, CustomParams2D } from "../../types/types";
-import { Button, Paper, Stack, Title, NumberInput, Group, Text, FileInput, Alert, ActionIcon } from "@mantine/core";
+import { Button, Paper, Stack, Title, NumberInput, Group, Text, FileInput, Alert, ActionIcon, Box } from "@mantine/core";
 import { IconFunction, IconPlayerPlay, IconUpload, IconAlertCircle, IconPlus, IconTrash } from "@tabler/icons-react";
 
 interface CustomFormProps {
@@ -74,15 +74,16 @@ export const CustomForm: React.FC<CustomFormProps> = ({
     const additionalStartIndex = is2D ? 7 : 4;
 
     return (
-        <Paper withBorder p="md" radius="md" bg="dark.7" c="white">
-            <Title order={4} mb="md">
-                <Group gap="xs">
-                    <IconFunction size={20} />
-                    <span>WASM {is2D ? '(2D)' : '(1D)'}</span>
-                </Group>
-            </Title>
+        <Paper
+            p="xl"
+            radius="xl"
+            style={{
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+            }}
+        >
             <form onSubmit={handleFormSubmit}>
-                <Stack gap="md">
+                <Stack gap="lg">
                     {uploadError && (
                         <Alert
                             icon={<IconAlertCircle size={16} />}
@@ -90,6 +91,10 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             color="red"
                             withCloseButton
                             onClose={() => setUploadError(null)}
+                            style={{
+                                background: 'rgba(255, 107, 107, 0.1)',
+                                border: '1px solid rgba(255, 107, 107, 0.3)',
+                            }}
                         >
                             {uploadError}
                         </Alert>
@@ -105,11 +110,30 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         leftSection={<IconUpload size={14} />}
                         disabled={disabled}
                         required
+                        styles={{
+                            input: {
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                color: 'white',
+                                '&::placeholder': { color: 'rgba(255, 255, 255, 0.5)' }
+                            },
+                            label: { color: 'white', fontWeight: 500 },
+                            description: { color: 'rgba(255, 255, 255, 0.7)' }
+                        }}
                     />
 
-                    <Text size="sm" c="dimmed">
-                        <strong>Parametry:</strong> {is2D ? '[x1, x2, y1, y2, dx, dy, ...dodatkowe]' : '[x1, x2, dx, ...dodatkowe]'}
-                    </Text>
+                    <Box
+                        p="md"
+                        style={{
+                            background: 'rgba(121, 80, 242, 0.1)',
+                            border: '1px solid rgba(121, 80, 242, 0.3)',
+                            borderRadius: '8px'
+                        }}
+                    >
+                        <Text size="sm" c="rgba(255, 255, 255, 0.9)" fw={500}>
+                            <strong>Format parametrów:</strong> {is2D ? '[x1, x2, y1, y2, dx, dy, ...dodatkowe]' : '[x1, x2, dx, ...dodatkowe]'}
+                        </Text>
+                    </Box>
 
                     <Group grow>
                         <NumberInput
@@ -119,6 +143,14 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             disabled={disabled}
                             required
                             radius="md"
+                            styles={{
+                                input: {
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    color: 'white'
+                                },
+                                label: { color: 'white', fontWeight: 500 }
+                            }}
                         />
                         <NumberInput
                             label="x2"
@@ -127,6 +159,14 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             disabled={disabled}
                             required
                             radius="md"
+                            styles={{
+                                input: {
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    color: 'white'
+                                },
+                                label: { color: 'white', fontWeight: 500 }
+                            }}
                         />
                     </Group>
 
@@ -139,6 +179,14 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                 disabled={disabled}
                                 required
                                 radius="md"
+                                styles={{
+                                    input: {
+                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        color: 'white'
+                                    },
+                                    label: { color: 'white', fontWeight: 500 }
+                                }}
                             />
                             <NumberInput
                                 label="y2"
@@ -147,12 +195,19 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                 disabled={disabled}
                                 required
                                 radius="md"
+                                styles={{
+                                    input: {
+                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        color: 'white'
+                                    },
+                                    label: { color: 'white', fontWeight: 500 }
+                                }}
                             />
                         </Group>
                     )}
 
                     <Group grow>
-
                         <NumberInput
                             label="dx"
                             value={getParam(dxIndex, 0.001)}
@@ -163,6 +218,14 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             disabled={disabled}
                             required
                             radius="md"
+                            styles={{
+                                input: {
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    color: 'white'
+                                },
+                                label: { color: 'white', fontWeight: 500 }
+                            }}
                         />
                         {is2D && (
                             <NumberInput
@@ -174,6 +237,14 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                 disabled={disabled}
                                 required
                                 radius="md"
+                                styles={{
+                                    input: {
+                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        color: 'white'
+                                    },
+                                    label: { color: 'white', fontWeight: 500 }
+                                }}
                             />
                         )}
                     </Group>
@@ -187,12 +258,30 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         disabled={disabled}
                         required
                         radius="md"
+                        styles={{
+                            input: {
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                color: 'white'
+                            },
+                            label: { color: 'white', fontWeight: 500 }
+                        }}
                     />
 
-                    {/* Dodatkowe parametry */}
                     <Group justify="space-between">
-                        <Text fw={500}>Dodatkowe parametry</Text>
-                        <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={addParam} disabled={disabled} color="green">
+                        <Text fw={500} c="white">Dodatkowe parametry</Text>
+                        <Button
+                            size="xs"
+                            variant="light"
+                            leftSection={<IconPlus size={14} />}
+                            onClick={addParam}
+                            disabled={disabled}
+                            style={{
+                                background: 'linear-gradient(45deg, rgba(121, 80, 242, 0.2), rgba(151, 117, 250, 0.2))',
+                                border: '1px solid rgba(121, 80, 242, 0.3)',
+                                color: 'white'
+                            }}
+                        >
                             Dodaj
                         </Button>
                     </Group>
@@ -208,6 +297,14 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                         disabled={disabled}
                                         radius="md"
                                         style={{ flex: 1 }}
+                                        styles={{
+                                            input: {
+                                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                                color: 'white'
+                                            },
+                                            label: { color: 'white', fontWeight: 500 }
+                                        }}
                                     />
                                     <ActionIcon
                                         color="red"
@@ -215,6 +312,10 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                         onClick={() => removeParam(additionalStartIndex + index)}
                                         disabled={disabled}
                                         mt="xl"
+                                        style={{
+                                            background: 'rgba(255, 107, 107, 0.1)',
+                                            border: '1px solid rgba(255, 107, 107, 0.3)',
+                                        }}
                                     >
                                         <IconTrash size={16} />
                                     </ActionIcon>
@@ -222,18 +323,31 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             ))}
                         </Stack>
                     ) : (
-                        <Text size="sm" c="dimmed" ta="center">Brak dodatkowych parametrów</Text>
+                        <Text size="sm" c="rgba(255, 255, 255, 0.5)" ta="center" py="md">
+                            Brak dodatkowych parametrów
+                        </Text>
                     )}
 
                     <Button
                         type="submit"
+                        radius="lg"
                         fullWidth
-                        size="md"
+                        size="lg"
                         disabled={disabled || !wasmFile}
                         leftSection={<IconPlayerPlay size={16} />}
-                        color="violet.6"
+                        style={{
+                            background: disabled || !wasmFile ?
+                                'rgba(255, 255, 255, 0.1)' :
+                                'linear-gradient(45deg, #7950f2, #9775fa)',
+                            border: 'none',
+                            transition: 'all 0.3s ease',
+                            '&:hover': !disabled && wasmFile ? {
+                                transform: 'translateY(-2px)',
+                                boxShadow: '0 8px 25px rgba(121, 80, 242, 0.4)',
+                            } : {}
+                        }}
                     >
-                        Uruchom {is2D ? '2D' : '1D'}
+                        Uruchom zadanie {is2D ? '2D' : '1D'}
                     </Button>
                 </Stack>
             </form>
