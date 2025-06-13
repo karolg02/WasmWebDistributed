@@ -21,12 +21,12 @@ export function TasksPanel() {
 
     const [customParams1D, setCustomParams1D] = useState<CustomParams1D>({
         method: 'custom1D',
-        params: [0, 1, 10000, 0.001],
+        params: [0, 1, 10000],
     });
 
     const [customParams2D, setCustomParams2D] = useState<CustomParams2D>({
         method: 'custom2D',
-        params: [0, 1, 0, 1, 10000, 0.001, 0.001],
+        params: [0, 1, 0, 1, 10000],
     });
 
     useEffect(() => {

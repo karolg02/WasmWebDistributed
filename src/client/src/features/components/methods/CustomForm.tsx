@@ -45,6 +45,9 @@ export const CustomForm: React.FC<CustomFormProps> = ({
     const updateParam = (index: number, value: number) => {
         (setTaskParams as any)((prev: any) => {
             const newParams = [...prev.params];
+            while (newParams.length <= index) {
+                newParams.push(0);
+            }
             newParams[index] = value;
             return { ...prev, params: newParams };
         });
@@ -69,15 +72,15 @@ export const CustomForm: React.FC<CustomFormProps> = ({
     const y1Index = is2D ? 2 : -1;
     const y2Index = is2D ? 3 : -1;
     const nIndex = is2D ? 4 : 2;
-    const dxIndex = is2D ? 5 : 3;
-    const dyIndex = is2D ? 6 : -1;
-    const additionalStartIndex = is2D ? 7 : 4;
+
+    const additionalStartIndex = is2D ? 5 : 3;
 
     return (
         <Paper
             p="xl"
             radius="xl"
             style={{
+                background: 'rgba(26, 27, 30, 0.6)',
                 backdropFilter: 'blur(20px)',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
             }}
@@ -131,7 +134,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         }}
                     >
                         <Text size="sm" c="rgba(255, 255, 255, 0.9)" fw={500}>
-                            <strong>Format parametrów:</strong> {is2D ? '[x1, x2, y1, y2, dx, dy, ...dodatkowe]' : '[x1, x2, dx, ...dodatkowe]'}
+                            <strong>Format parametrów:</strong> {is2D ? '[x1, x2, y1, y2, ...dodatkowe]' : '[x1, x2, ...dodatkowe]'}
                         </Text>
                     </Box>
 
@@ -207,48 +210,6 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         </Group>
                     )}
 
-                    <Group grow>
-                        <NumberInput
-                            label="dx"
-                            value={getParam(dxIndex, 0.001)}
-                            onChange={(val) => updateParam(dxIndex, Number(val) || 0.001)}
-                            min={0.000000001}
-                            max={100}
-                            step={0.001}
-                            disabled={disabled}
-                            required
-                            radius="md"
-                            styles={{
-                                input: {
-                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                                    color: 'white'
-                                },
-                                label: { color: 'white', fontWeight: 500 }
-                            }}
-                        />
-                        {is2D && (
-                            <NumberInput
-                                label="dy"
-                                value={getParam(dyIndex, 0.001)}
-                                onChange={(val) => updateParam(dyIndex, Number(val) || 0.001)}
-                                min={0.000001}
-                                step={0.001}
-                                disabled={disabled}
-                                required
-                                radius="md"
-                                styles={{
-                                    input: {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                                        color: 'white'
-                                    },
-                                    label: { color: 'white', fontWeight: 500 }
-                                }}
-                            />
-                        )}
-                    </Group>
-
                     <NumberInput
                         label="Liczba zadań (N)"
                         value={getParam(nIndex, 100)}
@@ -297,6 +258,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                         onChange={(val) => updateParam(additionalStartIndex + index, Number(val) || 0)}
                                         disabled={disabled}
                                         radius="md"
+                                        step={0.001}
                                         style={{ flex: 1 }}
                                         styles={{
                                             input: {

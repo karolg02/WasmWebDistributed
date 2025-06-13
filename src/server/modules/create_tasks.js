@@ -8,7 +8,7 @@ async function createTasks(taskParams) {
 }
 
 function createCustom1DTasks(taskParams) {
-    const [x1, x2, N, dx, ...additionalParams] = taskParams.params;
+    const [x1, x2, N, ...additionalParams] = taskParams.params;
     const fragment = (x2 - x1) / N;
     const tasks = [];
 
@@ -21,15 +21,14 @@ function createCustom1DTasks(taskParams) {
             method: taskParams.method,
             a: a,
             b: b,
-            dx: dx,
-            paramsArray: [a, b, dx, ...additionalParams]
+            paramsArray: [a, b, ...additionalParams]
         });
     }
     return tasks;
 }
 
 function createCustom2DTasks(taskParams) {
-    const [x1, x2, y1, y2, N, dx, dy, ...additionalParams] = taskParams.params;
+    const [x1, x2, y1, y2, N, ...additionalParams] = taskParams.params;
 
     const nx = Math.ceil(Math.sqrt(N));
     const ny = Math.ceil(N / nx);
@@ -54,9 +53,7 @@ function createCustom2DTasks(taskParams) {
                 b: b,
                 c: c,
                 d: d,
-                dx: dx,
-                dy: dy,
-                paramsArray: [a, b, c, d, dx, dy, ...additionalParams]
+                paramsArray: [a, b, c, d, ...additionalParams]
             });
             taskId++;
         }
