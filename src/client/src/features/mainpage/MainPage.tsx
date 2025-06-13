@@ -2,25 +2,15 @@ import { Container, Title, Text, Space, Card, Group, Image, Box, Center } from "
 import { TasksList } from "./TasksList";
 import { useState } from "react";
 import { IconSparkles } from "@tabler/icons-react";
+import { useNavigate } from "react-router-dom";
 
 export function MainPage() {
     const [hoveredCard, setHoveredCard] = useState<number | null>(null);
+    const navigate = useNavigate();
 
     return (
         <Container size="xl" py="xl">
             <Box mb="xl" ta="center">
-                <Center mb="md">
-                    <Box
-                        style={{
-                            background: 'linear-gradient(45deg, #7950f2, #9775fa)',
-                            borderRadius: '50%',
-                            padding: '20px',
-                            boxShadow: '0 8px 32px rgba(121, 80, 242, 0.4)',
-                        }}
-                    >
-                        <IconSparkles size={40} color="white" />
-                    </Box>
-                </Center>
                 <Title
                     order={1}
                     size="3rem"
@@ -69,7 +59,7 @@ export function MainPage() {
                         '0 20px 60px rgba(121, 80, 242, 0.3), 0 0 40px rgba(255, 255, 255, 0.1)' :
                         '0 8px 32px rgba(0, 0, 0, 0.3)',
                 }}
-                onClick={() => console.log('Instrukcja WASM clicked')}
+                onClick={() => navigate('/help')}
                 maw={800}
                 mx="auto"
             >

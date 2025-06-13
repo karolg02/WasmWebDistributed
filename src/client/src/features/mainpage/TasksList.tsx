@@ -1,7 +1,7 @@
 import { Card, Group, Badge, Image, Text, SimpleGrid, Title, Box, Center } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { IconCube, IconBoxMultiple, IconArrowRight } from "@tabler/icons-react";
+import { IconCube, IconBoxMultiple, IconArrowRight, IconRuler3, IconDimensions, IconArrowAutofitContent } from "@tabler/icons-react";
 
 interface Task {
     id: number;
@@ -27,7 +27,8 @@ export function TasksList() {
             badge: "1D",
             dest: "/client",
             method: "custom1D",
-            icon: <IconCube size={28} color="white" />
+            icon: <IconArrowAutofitContent
+                size={28} color="white" />
         },
         {
             id: 2,
@@ -37,7 +38,8 @@ export function TasksList() {
             badge: "2D",
             dest: "/client",
             method: "custom2D",
-            icon: <IconBoxMultiple size={28} color="white" />
+            icon: <IconDimensions
+                size={28} color="white" />
         }
     ];
 

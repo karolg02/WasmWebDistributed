@@ -95,39 +95,6 @@ export function TasksPanel() {
 
     return (
         <Container size="lg" py="xl" className="fade-in">
-            <Box mb="xl" ta="center">
-                <Box
-                    style={{
-                        background: 'linear-gradient(45deg, #7950f2, #9775fa)',
-                        borderRadius: '50%',
-                        padding: '16px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: '20px',
-                        boxShadow: '0 8px 32px rgba(121, 80, 242, 0.4)',
-                    }}
-                >
-                    <IconCpu size={32} color="white" />
-                </Box>
-                <Title
-                    order={1}
-                    size="2.5rem"
-                    mb="md"
-                    style={{
-                        background: 'linear-gradient(45deg, #7950f2, #9775fa)',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                        backgroundClip: 'text',
-                    }}
-                >
-                    Panel Zadań {currentMethod === 'custom2D' ? '2D' : '1D'}
-                </Title>
-                <Text size="lg" c="rgba(255, 255, 255, 0.8)">
-                    Skonfiguruj i uruchom swoje zadanie obliczeniowe
-                </Text>
-            </Box>
-
             <Paper
                 style={{
                     background: 'rgba(26, 27, 30, 0.6)',
@@ -137,6 +104,20 @@ export function TasksPanel() {
                 p="xl"
                 radius="xl"
             >
+                <Title
+                    order={1}
+                    size="2.5rem"
+                    mb="md"
+                    ta={"center"}
+                    style={{
+                        background: 'linear-gradient(45deg, #7950f2, #9775fa)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        backgroundClip: 'text',
+                    }}
+                >
+                    Panel konfiguracyjny {currentMethod === 'custom2D' ? '2D' : '1D'}
+                </Title>
                 {error && (
                     <Alert
                         icon={<IconAlertTriangle size={16} />}

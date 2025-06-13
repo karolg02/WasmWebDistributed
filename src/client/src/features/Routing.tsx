@@ -3,6 +3,7 @@ import { TasksPanel } from "./taskspanel/TasksPanel";
 import { Layout } from "../components/Layout";
 import { MainPage } from "./mainpage/MainPage";
 import { ClientAcc } from "./clientacc/ClientAcc";
+import { Help } from "./help/Help";
 
 const routes: RouteObject[] = [
     {
@@ -21,6 +22,10 @@ const routes: RouteObject[] = [
 
                 path: "/clientacc",
                 element: <ClientAcc />
+            },
+            {
+                path: "/help",
+                element: <Help />
             }
         ]
     }

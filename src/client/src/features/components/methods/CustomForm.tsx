@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { CustomParams1D, CustomParams2D } from "../../types/types";
-import { Button, Paper, Stack, Title, NumberInput, Group, Text, FileInput, Alert, ActionIcon, Box } from "@mantine/core";
+import { Button, Paper, Stack, Title, NumberInput, Group, Text, FileInput, Alert, ActionIcon, Box, SimpleGrid } from "@mantine/core";
 import { IconFunction, IconPlayerPlay, IconUpload, IconAlertCircle, IconPlus, IconTrash } from "@tabler/icons-react";
 
 interface CustomFormProps {
@@ -276,6 +276,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                             leftSection={<IconPlus size={14} />}
                             onClick={addParam}
                             disabled={disabled}
+                            radius="md"
                             style={{
                                 background: 'linear-gradient(45deg, rgba(121, 80, 242, 0.2), rgba(151, 117, 250, 0.2))',
                                 border: '1px solid rgba(121, 80, 242, 0.3)',
@@ -287,7 +288,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                     </Group>
 
                     {taskParams.params.length > additionalStartIndex ? (
-                        <Stack gap="sm">
+                        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
                             {taskParams.params.slice(additionalStartIndex).map((param, index) => (
                                 <Group key={additionalStartIndex + index} gap="sm">
                                     <NumberInput
@@ -321,7 +322,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                                     </ActionIcon>
                                 </Group>
                             ))}
-                        </Stack>
+                        </SimpleGrid>
                     ) : (
                         <Text size="sm" c="rgba(255, 255, 255, 0.5)" ta="center" py="md">
                             Brak dodatkowych parametrów

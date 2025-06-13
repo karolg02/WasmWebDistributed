@@ -7,7 +7,8 @@ import {
     IconWorldWww,
     IconCpu,
     IconCheck,
-    IconClock
+    IconClock,
+    IconUsers
 } from "@tabler/icons-react";
 import { Worker } from "../types/Worker";
 import { QueueStatus } from "../types/types";
@@ -35,7 +36,10 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
         return <IconWorldWww size={20} color="white" />;
     };
 
-    const status = getWorkerStatus(queueStatus || { queueLength: 0, currentClient: null, isAvailable: false }, isCurrentClient);
+    const status = getWorkerStatus(
+        queueStatus || { queueLength: 0, currentClient: null, isAvailable: true, isCalculating: false },
+        isCurrentClient
+    );
 
     return (
         <Card
@@ -118,24 +122,23 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
                     </Text>
                 </Group>
 
-                <Progress
-                    value={Math.min((worker.performance.benchmarkScore / 10000) * 100, 100)}
-                    size="sm"
-                    style={{
-                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    }}
-                    styles={{
-                        section: {
-                            background: 'linear-gradient(45deg, #7950f2, #9775fa)',
-                        }
-                    }}
-                />
+                {queueStatus && queueStatus.queueLength > 0 && (
+                    <Group justify="space-between">
+                        <Group gap="xs">
+                            <IconUsers size={16} color="#ff9500" />
+                            <Text size="xs" c="rgba(255, 255, 255, 0.8)">W kolejce</Text>
+                        </Group>
+                        <Badge size="xs" style={{ backgroundColor: "#ff9500", color: 'white' }}>
+                            {queueStatus.queueLength} {queueStatus.queueLength === 1 ? 'osoba' : 'osób'}
+                        </Badge>
+                    </Group>
+                )}
 
                 {status.badge && (
                     <Group justify="space-between">
                         <Group gap="xs">
                             <IconClock size={16} color="#ff9500" />
-                            <Text size="xs" c="rgba(255, 255, 255, 0.8)">Info</Text>
+                            <Text size="xs" c="rgba(255, 255, 255, 0.8)">Status</Text>
                         </Group>
                         <Badge size="xs" color="orange">
                             {status.badge}

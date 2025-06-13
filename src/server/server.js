@@ -74,13 +74,13 @@ app.post('/upload-wasm', upload.fields([
             });
         }
 
-        // Pobierz tymczasową ścieżkę pliku WASM
+        // sciezka to pliku wasm
         const wasmTempFile = req.files['wasmFile'][0];
 
         // Docelowa ścieżka z poprawną nazwą
         const wasmPath = path.join(tempDir, `${sanitizedId}.wasm`);
 
-        // Przenieś plik z tymczasowej nazwy na docelową
+        // przenosimy plik
         try {
             fs.renameSync(wasmTempFile.path, wasmPath);
         } catch (renameError) {
@@ -91,7 +91,6 @@ app.post('/upload-wasm', upload.fields([
             });
         }
 
-        // Sprawdź czy plik został zapisany
         if (!fs.existsSync(wasmPath)) {
             return res.json({
                 success: false,
@@ -99,15 +98,14 @@ app.post('/upload-wasm', upload.fields([
             });
         }
 
-        console.log(`[Server] WASM file uploaded successfully for client ${clientId}:`);
-        console.log(`[Server] WASM: ${wasmPath}`);
+        // console.log(`[Server] WASM file uploaded successfully for client ${clientId}:`);
+        // console.log(`[Server] WASM: ${wasmPath}`);
 
         activeCustomFunctions.set(clientId, {
             active: true,
             sanitizedId: sanitizedId
         });
 
-        // Powiadom workerów o dostępności nowego WASM
         io.of("/worker").emit("custom_wasm_available", {
             clientId,
             sanitizedId,
@@ -135,7 +133,7 @@ function cleanupClientFiles(clientId, tempDir) {
 
     if (fs.existsSync(wasmFile)) {
         fs.unlinkSync(wasmFile);
-        console.log(`[Server] Removed WASM file: ${wasmFile}`);
+        // console.log(`[Server] Removed WASM file: ${wasmFile}`);
     }
 }
 
@@ -167,11 +165,14 @@ async function broadcastQueueStatus() {
         const currentClient = workerLocks.get(workerId);
         const queue = workerQueue.get(workerId) || [];
 
+        const isCalculating = currentClient && clientTasks.has(currentClient);
+
         queueStatus[workerId] = {
             workerId,
             queueLength: queue.length,
             currentClient: currentClient || null,
-            isAvailable: !currentClient
+            isAvailable: !currentClient,
+            isCalculating: isCalculating || false
         };
     }
 
@@ -222,7 +223,7 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
         }
     }
 
-    console.log(`[Server] Distributing tasks for method: ${originalTaskParams.method}, sanitizedId: ${originalTaskParams.sanitizedId}`);
+    // console.log(`[Server] Distributing tasks for method: ${originalTaskParams.method}, sanitizedId: ${originalTaskParams.sanitizedId}`);
 
     for (const { id, batchSize } of taskCountPerWorker) {
         const queueName = `tasks.worker_${id}`;
@@ -370,12 +371,11 @@ async function start() {
     io.of("/client").on("connection", (socket) => {
         console.log("[Client] Connected", socket.id);
         clientSockets.set(socket.id, socket);
-        broadcastWorkerList();
 
         socket.on("start", async ({ workerIds, taskParams }) => {
             const clientId = socket.id;
 
-            console.log(`[Client] Starting task with method: ${taskParams.method}, sanitizedId: ${taskParams.sanitizedId}`);
+            // console.log(`[Client] Starting task with method: ${taskParams.method}, sanitizedId: ${taskParams.sanitizedId}`);
 
             const selected = workerIds.filter(id => workers.has(id));
             const tasks = await createTasks(taskParams);
@@ -427,6 +427,7 @@ async function start() {
 
         socket.on("request_worker_list", () => {
             broadcastWorkerList();
+            broadcastQueueStatus();
         });
 
         socket.on("disconnect", () => {
