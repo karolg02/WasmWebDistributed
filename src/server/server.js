@@ -3,12 +3,19 @@ const amqp = require("amqplib");
 const http = require("http");
 const express = require("express");
 const multer = require("multer");
+const cors = require("cors"); // Dodaj import cors
 const { createTasks } = require("./modules/create_tasks");
 const { createQueuePerClient } = require("./modules/queue");
 const fs = require('fs');
 const path = require('path');
 
 const app = express();
+app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 app.use(express.json());
 const server = http.createServer(app);
 const io = new Server(server, {
