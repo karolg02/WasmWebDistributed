@@ -6,53 +6,9 @@ import multer from "multer";
 import cors from "cors";
 import { createTasks } from "./modules/create_tasks";
 import { createQueuePerClient } from "./modules/queue";
-import { AllTaskParams, Task } from "./modules/types";
+import { ActiveCustomFunction, AllTaskParams, ClientState, ClientTask, Task, WaitingClient, WorkerInfo } from "./modules/types";
 import fs from 'fs';
 import path from 'path';
-
-interface WorkerInfo {
-    socket: any;
-    name: string;
-    benchmarkScore: number;
-    specs: {
-        platform: string;
-        userAgent: string;
-        language: string;
-        hardwareConcurrency: number;
-        deviceMemory: string | number;
-    };
-    performance: {
-        benchmarkScore: number;
-        latency: number;
-    };
-}
-
-interface ClientState {
-    expected: number;
-    completed: number;
-    sum: number;
-    start: number;
-    lastUpdate: number;
-    method: string;
-    totalSamples: number | null;
-}
-
-interface ClientTask {
-    socket: any;
-    workerIds: string[];
-}
-
-interface WaitingClient {
-    socket: any;
-    workerIds: string[];
-    tasks: Task[];
-    taskParams: AllTaskParams;
-}
-
-interface ActiveCustomFunction {
-    active: boolean;
-    sanitizedId: string;
-}
 
 const app = express();
 app.use(cors({
@@ -103,8 +59,6 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
-
-// Poprawka dla handlera - dodaj void return i popraw typy
 app.post('/upload-wasm', upload.fields([
     { name: 'wasmFile', maxCount: 1 }
 ]), (req: Request, res: Response): void => {
@@ -318,12 +272,11 @@ async function tryToGiveTasksForWaitingClients(): Promise<void> {
 }
 
 async function start(): Promise<void> {
-    // Poprawka dla amqp connection
     const conn = await amqp.connect("amqp://localhost");
     connection = conn;
     channel = await conn.createChannel();
 
-    // Worker connections
+    //workerzy
     io.of("/worker").on("connection", async (socket) => {
         console.log("[Worker] Connected", socket.id);
 
@@ -418,7 +371,7 @@ async function start(): Promise<void> {
         });
     });
 
-    // Client connections
+    // klienci
     io.of("/client").on("connection", (socket) => {
         console.log("[Client] Connected", socket.id);
         clientSockets.set(socket.id, socket);

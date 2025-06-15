@@ -28,3 +28,47 @@ export interface Task {
     useCustomFunction?: boolean;
     sanitizedId?: string;
 }
+
+export interface WorkerInfo {
+    socket: any;
+    name: string;
+    benchmarkScore: number;
+    specs: {
+        platform: string;
+        userAgent: string;
+        language: string;
+        hardwareConcurrency: number;
+        deviceMemory: string | number;
+    };
+    performance: {
+        benchmarkScore: number;
+        latency: number;
+    };
+}
+
+export interface ClientState {
+    expected: number;
+    completed: number;
+    sum: number;
+    start: number;
+    lastUpdate: number;
+    method: string;
+    totalSamples: number | null;
+}
+
+export interface ClientTask {
+    socket: any;
+    workerIds: string[];
+}
+
+export interface WaitingClient {
+    socket: any;
+    workerIds: string[];
+    tasks: Task[];
+    taskParams: AllTaskParams;
+}
+
+export interface ActiveCustomFunction {
+    active: boolean;
+    sanitizedId: string;
+}
