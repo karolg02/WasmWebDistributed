@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Transition, Center, Box } from "@mantine/core";
-import { IconClockHour4, IconCheck, IconCalculator, IconHourglass, IconTrendingUp } from "@tabler/icons-react";
+import { Stack, Group, Text, Progress, Paper, Card, RingProgress, Transition, Center, Box, Code, JsonInput } from "@mantine/core";
+import { IconClockHour4, IconCheck, IconCalculator, IconHourglass, IconTrendingUp, IconBraces } from "@tabler/icons-react";
 import { Progress as ProgressType } from "../types/types";
 import { formatTime } from "../utils/formatTime";
 
@@ -9,7 +9,7 @@ interface ResultsPanelProps {
     progress: ProgressType;
     taskParams: any;
     startTime: number | null;
-    result: number | null;
+    result: any;
     duration: number | null;
     tasksPerSecond: number | null;
     method?: 'custom1D' | 'custom2D';
@@ -100,6 +100,66 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
         const remaining = calculateEstimatedTimeRemaining();
         return remaining !== null ? formatTime(remaining) : '-';
     };
+
+    const formatResult = (result: any) => {
+        if (result === null || result === undefined) {
+            return { display: "-", isJson: false, type: "empty" };
+        }
+        if (typeof result === 'object' && result !== null) {
+            return {
+                display: JSON.stringify(result, null, 2),
+                isJson: true,
+                parsed: result,
+                type: "object"
+            };
+        }
+
+        if (typeof result === 'string') {
+            const trimmed = result.trim();
+            try {
+                const parsed = JSON.parse(trimmed);
+                return {
+                    display: JSON.stringify(parsed, null, 2),
+                    isJson: true,
+                    parsed: parsed,
+                    type: "json"
+                };
+            } catch (e) {
+                const asNumber = parseFloat(trimmed);
+                if (!isNaN(asNumber) && isFinite(asNumber) && trimmed === asNumber.toString()) {
+                    return {
+                        display: trimmed,
+                        isJson: false,
+                        type: "number",
+                        numericValue: asNumber
+                    };
+                }
+
+                return {
+                    display: trimmed,
+                    isJson: false,
+                    type: "text"
+                };
+            }
+        }
+
+        if (typeof result === 'number') {
+            return {
+                display: result.toString(),
+                isJson: false,
+                type: "number",
+                numericValue: result
+            };
+        }
+
+        return {
+            display: String(result),
+            isJson: false,
+            type: "unknown"
+        };
+    };
+
+    const resultFormatted = formatResult(result);
 
     return (
         <>
@@ -202,7 +262,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                         }}
                     >
                         <Group justify="space-between" align="flex-start">
-                            <Stack gap="md">
+                            <Stack gap="md" style={{ flex: 1 }}>
                                 <Group gap="sm">
                                     <Box
                                         style={{
@@ -214,14 +274,70 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
                                             justifyContent: 'center'
                                         }}
                                     >
-                                        <IconCalculator size={20} color="white" />
+                                        {resultFormatted.isJson ? (
+                                            <IconBraces size={20} color="white" />
+                                        ) : (
+                                            <IconCalculator size={20} color="white" />
+                                        )}
                                     </Box>
-                                    <Text size="lg" fw={600} c="white">Wynik końcowy</Text>
+                                    <Text size="lg" fw={600} c="white">
+                                        {resultFormatted.type === "json" ? "Wynik JSON" :
+                                            resultFormatted.type === "number" ? "Wynik liczbowy" :
+                                                "Wynik tekstowy"}
+                                    </Text>
                                 </Group>
 
-                                <Text size="2rem" fw={700} c="#7950f2" style={{ fontFamily: 'monospace' }}>
-                                    {result !== null ? result.toFixed(6) : "-"}
-                                </Text>
+                                {/* Wyświetl zależnie od typu */}
+                                {resultFormatted.isJson ? (
+                                    <Box>
+                                        <Code
+                                            block
+                                            style={{
+                                                backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                borderRadius: '8px',
+                                                padding: '16px',
+                                                fontFamily: 'monospace',
+                                                fontSize: '14px',
+                                                color: '#7950f2',
+                                                whiteSpace: 'pre-wrap',
+                                                wordBreak: 'break-word',
+                                                maxHeight: '300px',
+                                                overflowY: 'auto'
+                                            }}
+                                        >
+                                            {resultFormatted.display}
+                                        </Code>
+
+                                        {/* Kluczowe wartości z JSON */}
+                                        {resultFormatted.parsed && (
+                                            <Stack gap="xs" mt="md">
+                                                {Object.entries(resultFormatted.parsed).map(([key, value]) => (
+                                                    <Group gap="xs" key={key}>
+                                                        <Text size="sm" c="rgba(255, 255, 255, 0.6)" tt="capitalize">
+                                                            {key}:
+                                                        </Text>
+                                                        <Text size="sm" fw={600} c="#7950f2" style={{ fontFamily: 'monospace' }}>
+                                                            {String(value)}
+                                                        </Text>
+                                                    </Group>
+                                                ))}
+                                            </Stack>
+                                        )}
+                                    </Box>
+                                ) : resultFormatted.type === "number" ? (
+                                    <Text size="2.5rem" fw={700} c="#7950f2" style={{ fontFamily: 'monospace' }}>
+                                        {resultFormatted.display}
+                                    </Text>
+                                ) : (
+                                    <Text size="xl" fw={500} c="#7950f2" style={{
+                                        fontFamily: resultFormatted.type === "text" ? 'inherit' : 'monospace',
+                                        whiteSpace: 'pre-wrap',
+                                        wordBreak: 'break-word'
+                                    }}>
+                                        {resultFormatted.display}
+                                    </Text>
+                                )}
 
                                 <Group gap="xs">
                                     <IconClockHour4 size={16} color="#7950f2" />

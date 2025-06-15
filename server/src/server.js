@@ -49,8 +49,8 @@ function sanitizeJsIdentifier(id) {
 async function executeClientGetResult(clientId, results) {
     const customFunction = activeCustomFunctions.get(clientId);
     if (!customFunction) {
-        console.log(`[Server] No custom function for client ${clientId}, returning sum`);
-        return results.reduce((sum, val) => sum + val, 0);
+        const sum = results.reduce((sum, val) => sum + val, 0);
+        return `Suma: ${sum}, Liczba wyników: ${results.length}`;
     }
 
     try {
@@ -83,18 +83,45 @@ async function executeClientGetResult(clientId, results) {
                 const targetPtr = resultsPtr + i * 8;
                 module.setValue(targetPtr, results[i], 'double');
             }
-            let finalResult;
 
+            let jsonResultPtr;
             if (typeof module._getResult === 'function') {
-                finalResult = module._getResult(resultsPtr, results.length);
+                jsonResultPtr = module._getResult(resultsPtr, results.length);
             } else if (typeof module.getResult === 'function') {
-                finalResult = module.getResult(resultsPtr, results.length);
+                jsonResultPtr = module.getResult(resultsPtr, results.length);
             } else {
-                finalResult = module.ccall('_getResult', 'number', ['number', 'number'], [resultsPtr, results.length]);
+                jsonResultPtr = module.ccall('_getResult', 'number', ['number', 'number'], [resultsPtr, results.length]);
+            }
+
+            if (!jsonResultPtr) {
+                throw new Error('getResult returned null pointer');
+            }
+
+            let resultString;
+            if (typeof module.UTF8ToString === 'function') {
+                resultString = module.UTF8ToString(jsonResultPtr);
+            } else if (typeof module.AsciiToString === 'function') {
+                resultString = module.AsciiToString(jsonResultPtr);
+            } else {
+                let str = '';
+                let i = 0;
+                while (true) {
+                    const charCode = module.getValue(jsonResultPtr + i, 'i8');
+                    if (charCode === 0) break;
+                    str += String.fromCharCode(charCode);
+                    i++;
+                }
+                resultString = str;
             }
 
             module._free(resultsPtr);
-            return finalResult;
+            if (typeof module._freeResult === 'function') {
+                module._freeResult(jsonResultPtr);
+            } else {
+                module._free(jsonResultPtr);
+            }
+
+            return resultString;
 
         } catch (execError) {
             module._free(resultsPtr);
@@ -102,9 +129,9 @@ async function executeClientGetResult(clientId, results) {
         }
 
     } catch (error) {
+        console.error(`[Server] Error executing getResult for ${clientId}:`, error);
         const fallbackSum = results.reduce((sum, val) => sum + val, 0);
-        console.log(`[Server] Using fallback sum: ${fallbackSum}`);
-        return fallbackSum;
+        return `Błąd! Suma fallback: ${fallbackSum}, Liczba: ${results.length}`;
     }
 }
 
@@ -389,11 +416,12 @@ async function start() {
 
             if (state.completed === state.expected) {
                 try {
-                    const finalResult = await executeClientGetResult(clientId, state.results);
+                    const rawResult = await executeClientGetResult(clientId, state.results);
                     const clientSocket = clientSockets.get(clientId);
+
                     if (clientSocket) {
                         clientSocket.emit("final_result", {
-                            result: finalResult,
+                            result: rawResult,
                             duration: ((now - state.start) / 1000).toFixed(2),
                             resultsCount: state.results.length
                         });
@@ -404,7 +432,7 @@ async function start() {
                     const clientSocket = clientSockets.get(clientId);
                     if (clientSocket) {
                         clientSocket.emit("final_result", {
-                            result: parseFloat(fallbackSum.toFixed(6)),
+                            result: `Błąd getResult! Suma: ${fallbackSum}`,
                             duration: ((now - state.start) / 1000).toFixed(2),
                             resultsCount: state.results.length,
                             error: "getResult failed, using sum instead"

@@ -598,7 +598,7 @@ function createExportWrapper(name, nargs) {
 var wasmBinaryFile;
 
 function findWasmBinary() {
-    return locateFile('monte_carlo_node.wasm');
+    return locateFile('monte_carlo.wasm');
 }
 
 function getBinarySync(file) {
@@ -1216,6 +1216,7 @@ async function createWasm() {
     };
 
 
+
 // End JS library code
 
 // include: postlibrary.js
@@ -1263,6 +1264,7 @@ Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
   Module['cwrap'] = cwrap;
   Module['setValue'] = setValue;
   Module['getValue'] = getValue;
+  Module['UTF8ToString'] = UTF8ToString;
   var missingLibrarySymbols = [
   'writeI53ToI64',
   'writeI53ToI64Clamped',
@@ -1495,7 +1497,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'PATH_FS',
   'UTF8Decoder',
   'UTF8ArrayToString',
-  'UTF8ToString',
   'stringToUTF8Array',
   'stringToUTF8',
   'lengthBytesUTF8',
@@ -1694,14 +1695,15 @@ var wasmExports = await createWasm();
 var ___wasm_call_ctors = createExportWrapper('__wasm_call_ctors', 0);
 var _main_function = Module['_main_function'] = createExportWrapper('main_function', 1);
 var _getResult = Module['_getResult'] = createExportWrapper('getResult', 2);
+var _malloc = Module['_malloc'] = createExportWrapper('malloc', 1);
+var _freeResult = Module['_freeResult'] = createExportWrapper('freeResult', 1);
+var _free = Module['_free'] = createExportWrapper('free', 1);
 var _fflush = createExportWrapper('fflush', 1);
 var _strerror = createExportWrapper('strerror', 1);
-var _malloc = Module['_malloc'] = createExportWrapper('malloc', 1);
-var _free = Module['_free'] = createExportWrapper('free', 1);
+var _emscripten_stack_get_end = wasmExports['emscripten_stack_get_end']
+var _emscripten_stack_get_base = wasmExports['emscripten_stack_get_base']
 var _emscripten_stack_init = wasmExports['emscripten_stack_init']
 var _emscripten_stack_get_free = wasmExports['emscripten_stack_get_free']
-var _emscripten_stack_get_base = wasmExports['emscripten_stack_get_base']
-var _emscripten_stack_get_end = wasmExports['emscripten_stack_get_end']
 var __emscripten_stack_restore = wasmExports['_emscripten_stack_restore']
 var __emscripten_stack_alloc = wasmExports['_emscripten_stack_alloc']
 var _emscripten_stack_get_current = wasmExports['emscripten_stack_get_current']
