@@ -140,7 +140,7 @@
                     case 'batch_progress':
                         const progressDataForServer = {
                             clientId: message.data.clientId,
-                            result: message.data.partialResult,
+                            results: message.data.results, // ❌ Zmień z result na results (tablica)
                             tasksCount: message.data.tasksProcessedInChunk,
                             method: message.data.method,
                             a: message.data.a,

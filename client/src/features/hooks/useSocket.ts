@@ -22,8 +22,8 @@ export const useSocket = () => {
             setProgress(data);
             setIsCalculating(true);
         });
-        socket.on("final_result", (data: { sum: number; duration: number }) => {
-            setResult(data.sum);
+        socket.on("final_result", (data: { result: number; duration: number }) => {
+            setResult(data.result);
             setDuration(data.duration);
             setIsCalculating(false);
         });

@@ -49,7 +49,7 @@ export interface WorkerInfo {
 export interface ClientState {
     expected: number;
     completed: number;
-    sum: number;
+    results: number[];
     start: number;
     lastUpdate: number;
     method: string;

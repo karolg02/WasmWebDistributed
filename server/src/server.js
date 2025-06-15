@@ -1,14 +1,13 @@
-import { Server } from "socket.io";
-import amqp, { Channel, Connection } from "amqplib";
-import http from "http";
-import express, { Request, Response } from "express";
-import multer from "multer";
-import cors from "cors";
-import { createTasks } from "./modules/create_tasks";
-import { createQueuePerClient } from "./modules/queue";
-import { ActiveCustomFunction, AllTaskParams, ClientState, ClientTask, Task, WaitingClient, WorkerInfo } from "./modules/types";
-import fs from 'fs';
-import path from 'path';
+const { Server } = require("socket.io");
+const amqp = require("amqplib");
+const http = require("http");
+const express = require("express");
+const multer = require("multer");
+const cors = require("cors");
+const { createTasks } = require("./modules/create_tasks");
+const { createQueuePerClient } = require("./modules/queue");
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(cors({
@@ -23,28 +22,90 @@ const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-const workers = new Map<string, WorkerInfo>();
-const clientSockets = new Map<string, any>();
-const clientTasks = new Map<string, ClientTask>();
-const workerLocks = new Map<string, string>();
-const workerQueue = new Map<string, string[]>();
-const waitingClients = new Map<string, WaitingClient>();
-const clientStates = new Map<string, ClientState>();
-const activeCustomFunctions = new Map<string, ActiveCustomFunction>();
+const workers = new Map();
+const clientSockets = new Map();
+const clientTasks = new Map();
+const workerLocks = new Map();
+const workerQueue = new Map();
+const waitingClients = new Map();
+const clientStates = new Map();
+const activeCustomFunctions = new Map();
 
-let channel: Channel | null = null;
-let connection: any = null;
+let channel = null;
+let connection = null;
 
 const tempDir = path.join(__dirname, '../../worker/temp');
 if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
 }
 
-function sanitizeJsIdentifier(id: string): string {
+function sanitizeJsIdentifier(id) {
     if (!id || typeof id !== 'string') {
         return 'unknown_client';
     }
     return id.replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+async function executeClientGetResult(clientId, results) {
+    const customFunction = activeCustomFunctions.get(clientId);
+    if (!customFunction) {
+        console.log(`[Server] No custom function for client ${clientId}, returning sum`);
+        return results.reduce((sum, val) => sum + val, 0);
+    }
+
+    try {
+        const wasmPath = path.join(__dirname, '../../worker/temp', `${customFunction.sanitizedId}.wasm`);
+        const loaderPath = path.join(__dirname, '../loader.js');
+
+        if (!fs.existsSync(loaderPath)) {
+            throw new Error(`Loader not found: ${loaderPath}`);
+        }
+
+        delete require.cache[require.resolve(loaderPath)];
+        const ModuleFactory = require(loaderPath);
+
+        const module = await ModuleFactory({
+            locateFile: (filename) => {
+                if (filename.endsWith('.wasm') || filename === 'monte_carlo.wasm') {
+                    return wasmPath;
+                }
+                return filename;
+            }
+        });
+
+        const resultsPtr = module._malloc(results.length * 8);
+        if (!resultsPtr) {
+            throw new Error('Failed to allocate memory in WASM');
+        }
+
+        try {
+            for (let i = 0; i < results.length; i++) {
+                const targetPtr = resultsPtr + i * 8;
+                module.setValue(targetPtr, results[i], 'double');
+            }
+            let finalResult;
+
+            if (typeof module._getResult === 'function') {
+                finalResult = module._getResult(resultsPtr, results.length);
+            } else if (typeof module.getResult === 'function') {
+                finalResult = module.getResult(resultsPtr, results.length);
+            } else {
+                finalResult = module.ccall('_getResult', 'number', ['number', 'number'], [resultsPtr, results.length]);
+            }
+
+            module._free(resultsPtr);
+            return finalResult;
+
+        } catch (execError) {
+            module._free(resultsPtr);
+            throw execError;
+        }
+
+    } catch (error) {
+        const fallbackSum = results.reduce((sum, val) => sum + val, 0);
+        console.log(`[Server] Using fallback sum: ${fallbackSum}`);
+        return fallbackSum;
+    }
 }
 
 const storage = multer.diskStorage({
@@ -59,50 +120,46 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
+
 app.post('/upload-wasm', upload.fields([
     { name: 'wasmFile', maxCount: 1 }
-]), (req: Request, res: Response): void => {
+]), (req, res) => {
     try {
         const { clientId, method } = req.body;
 
         if (!clientId) {
-            res.json({
+            return res.json({
                 success: false,
                 error: "Brak clientId w żądaniu"
             });
-            return;
         }
 
         const sanitizedId = sanitizeJsIdentifier(clientId);
 
-        if (!req.files || !(req.files as any)['wasmFile']) {
-            res.json({
+        if (!req.files || !req.files['wasmFile']) {
+            return res.json({
                 success: false,
                 error: "Brak wymaganego pliku WASM"
             });
-            return;
         }
 
-        const wasmTempFile = (req.files as any)['wasmFile'][0];
+        const wasmTempFile = req.files['wasmFile'][0];
         const wasmPath = path.join(tempDir, `${sanitizedId}.wasm`);
 
         try {
             fs.renameSync(wasmTempFile.path, wasmPath);
         } catch (renameError) {
-            console.error('[Server] Error renaming WASM file:', renameError);
-            res.json({
+            return res.json({
                 success: false,
                 error: "Błąd podczas zapisywania pliku WASM"
             });
-            return;
         }
 
         if (!fs.existsSync(wasmPath)) {
-            res.json({
+            return res.json({
                 success: false,
                 error: "Błąd podczas zapisywania pliku WASM"
             });
-            return;
         }
 
         activeCustomFunctions.set(clientId, {
@@ -131,7 +188,7 @@ app.post('/upload-wasm', upload.fields([
     }
 });
 
-function cleanupClientFiles(clientId: string, tempDir: string): void {
+function cleanupClientFiles(clientId, tempDir) {
     const sanitizedId = sanitizeJsIdentifier(clientId);
     const wasmFile = path.join(tempDir, `${sanitizedId}.wasm`);
 
@@ -142,7 +199,7 @@ function cleanupClientFiles(clientId: string, tempDir: string): void {
 
 app.use('/temp', express.static(tempDir));
 
-async function broadcastWorkerList(): Promise<void> {
+async function broadcastWorkerList() {
     const list = Array.from(workers.entries()).map(([id, worker]) => ({
         id,
         name: worker.name,
@@ -161,12 +218,11 @@ async function broadcastWorkerList(): Promise<void> {
     io.of("/client").emit("worker_update", list);
 }
 
-async function broadcastQueueStatus(): Promise<void> {
-    const queueStatus: Record<string, any> = {};
+async function broadcastQueueStatus() {
+    const queueStatus = {};
     for (const [workerId] of workers.entries()) {
         const currentClient = workerLocks.get(workerId);
         const queue = workerQueue.get(workerId) || [];
-
         const isCalculating = currentClient && clientTasks.has(currentClient);
 
         queueStatus[workerId] = {
@@ -181,9 +237,7 @@ async function broadcastQueueStatus(): Promise<void> {
     io.of("/client").emit("queue_status", queueStatus);
 }
 
-async function tasksDevider3000(tasks: Task[], clientId: string, selectedWorkerIds: string[], originalTaskParams: AllTaskParams): Promise<void> {
-    if (!channel) return;
-
+async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTaskParams) {
     const benchmarks = selectedWorkerIds.map(id => ({
         id,
         benchmarkScore: workers.get(id)?.performance?.benchmarkScore || 0.1
@@ -195,13 +249,12 @@ async function tasksDevider3000(tasks: Task[], clientId: string, selectedWorkerI
         count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length),
         batchSize: Math.max(50, Math.min(1000, Math.round(((workers.get(worker.id)?.performance?.benchmarkScore || 0.1) * 100) / 50) * 50))
     }));
-
     let assigned = taskCountPerWorker.reduce((sum, worker) => sum + worker.count, 0);
     let remaining = tasks.length - assigned;
 
     if (remaining > 0) {
         const workersByScore = [...taskCountPerWorker]
-            .sort((a, b) => (workers.get(b.id)?.performance?.benchmarkScore || 0) - (workers.get(a.id)?.performance?.benchmarkScore || 0));
+            .sort((a, b) => (b.benchmarkScore || 0) - (a.benchmarkScore || 0));
 
         for (let i = 0; remaining > 0; i = (i + 1) % workersByScore.length) {
             workersByScore[i].count += 1;
@@ -210,14 +263,14 @@ async function tasksDevider3000(tasks: Task[], clientId: string, selectedWorkerI
     }
 
     let taskIndex = 0;
-    const workerTasks = new Map<string, Task[]>();
+    const workerTasks = new Map();
 
     for (const { id, count } of taskCountPerWorker) {
         if (!workerTasks.has(id)) {
             workerTasks.set(id, []);
         }
 
-        const workerTaskList = workerTasks.get(id)!;
+        const workerTaskList = workerTasks.get(id);
         for (let j = 0; j < count && taskIndex < tasks.length; j++) {
             const task = tasks[taskIndex];
             task.clientId = clientId;
@@ -241,7 +294,7 @@ async function tasksDevider3000(tasks: Task[], clientId: string, selectedWorkerI
     }
 }
 
-async function tryToGiveTasksForWaitingClients(): Promise<void> {
+async function tryToGiveTasksForWaitingClients() {
     for (const [clientId, pending] of waitingClients.entries()) {
         const allFree = pending.workerIds.every(id => !workerLocks.has(id));
         if (!allFree) continue;
@@ -261,26 +314,24 @@ async function tryToGiveTasksForWaitingClients(): Promise<void> {
         clientStates.set(clientId, {
             expected: pending.tasks.length,
             completed: 0,
-            results: [], // Zamiast sum: 0
+            results: [],
             start: 0,
             lastUpdate: 0,
             method: pending.taskParams.method,
-            totalSamples: pending.taskParams.method === 'custom1D' || pending.taskParams.method === 'custom2D' ? null : (pending.taskParams as any).samples
+            totalSamples: pending.taskParams.method === 'custom1D' || pending.taskParams.method === 'custom2D' ? null : pending.taskParams.samples
         });
         await tasksDevider3000(pending.tasks, clientId, pending.workerIds, pending.taskParams);
     }
 }
 
-async function start(): Promise<void> {
-    const conn = await amqp.connect("amqp://localhost");
-    connection = conn;
-    channel = await conn.createChannel();
+async function start() {
+    connection = await amqp.connect("amqp://localhost");
+    channel = await connection.createChannel();
 
-    //workerzy
     io.of("/worker").on("connection", async (socket) => {
         console.log("[Worker] Connected", socket.id);
 
-        socket.on("register", async (workerInfo: any) => {
+        socket.on("register", async (workerInfo) => {
             const name = `${workerInfo?.system?.platform || 'Unknown'} (${workerInfo?.performance?.benchmarkScore?.toFixed(2) || '0.00'})`;
 
             workers.set(socket.id, {
@@ -300,53 +351,29 @@ async function start(): Promise<void> {
                 }
             });
 
-            await createQueuePerClient(channel!, socket.id, socket);
+            await createQueuePerClient(channel, socket.id, socket);
             broadcastWorkerList();
         });
 
-        socket.on("batch_result", async (data: any) => {
-            console.log(`[DEBUG] ==================== BATCH_RESULT DEBUG ====================`);
-            console.log(`[DEBUG] Raw data received:`, JSON.stringify(data, null, 2));
-            console.log(`[DEBUG] typeof data.results:`, typeof data.results);
-            console.log(`[DEBUG] Array.isArray(data.results):`, Array.isArray(data.results));
-            console.log(`[DEBUG] data.results?.length:`, data.results?.length);
-            console.log(`[DEBUG] data.results (first 5):`, Array.isArray(data.results) ? data.results.slice(0, 5) : data.results);
-            console.log(`[DEBUG] Has 'result' field:`, 'result' in data);
-            console.log(`[DEBUG] data.result:`, data.result);
-            console.log(`[DEBUG] =============================================================`);
-
+        socket.on("batch_result", async (data) => {
             const { clientId, results, result, tasksCount, method } = data;
             const state = clientStates.get(clientId);
 
-            if (!state) {
-                console.log(`[DEBUG] No state found for client ${clientId}`);
-                return;
-            }
+            if (!state) return;
 
             if (state.completed === 0) {
                 state.start = Date.now();
                 state.method = method;
                 state.results = [];
-                console.log(`[DEBUG] Initialized new state for client ${clientId}`);
             }
 
-            // Dodaj wszystkie wyniki z tablicy do state.results
             if (Array.isArray(results) && results.length > 0) {
-                console.log(`[DEBUG] Adding ${results.length} results from array to state`);
-                console.log(`[DEBUG] Results being added:`, results.slice(0, 3));
                 state.results.push(...results);
             } else if (result !== undefined && result !== null) {
-                console.log(`[DEBUG] Adding single result to state: ${result}`);
                 state.results.push(result);
-            } else {
-                console.log(`[DEBUG] ERROR: No valid results received! results=${results}, result=${result}`);
             }
 
             state.completed += tasksCount;
-
-            console.log(`[DEBUG] State now has ${state.results.length} total results`);
-            console.log(`[DEBUG] First few results in state:`, state.results.slice(0, 5));
-            console.log(`[DEBUG] Completed: ${state.completed}/${state.expected}`);
 
             const now = Date.now();
             if (now - state.lastUpdate >= 1000 || state.completed === state.expected) {
@@ -360,19 +387,9 @@ async function start(): Promise<void> {
                 state.lastUpdate = now;
             }
 
-            // Gdy wszystkie zadania są ukończone
             if (state.completed === state.expected) {
-                console.log(`[DEBUG] All tasks completed for ${clientId}`);
-                console.log(`[DEBUG] Final state.results.length: ${state.results.length}`);
-                console.log(`[DEBUG] Final state.results (first 10):`, state.results.slice(0, 10));
-                console.log(`[DEBUG] Final state.results (last 10):`, state.results.slice(-10));
-
-                console.log(`[Server] All tasks completed for ${clientId}, executing getResult...`);
-
                 try {
-                    // Wywołaj getResult z WASM klienta
                     const finalResult = await executeClientGetResult(clientId, state.results);
-
                     const clientSocket = clientSockets.get(clientId);
                     if (clientSocket) {
                         clientSocket.emit("final_result", {
@@ -383,8 +400,6 @@ async function start(): Promise<void> {
                     }
                 } catch (error) {
                     console.error(`[Server] Error in getResult for ${clientId}:`, error);
-
-                    // Fallback do sumy
                     const fallbackSum = state.results.reduce((sum, val) => sum + val, 0);
                     const clientSocket = clientSockets.get(clientId);
                     if (clientSocket) {
@@ -396,8 +411,6 @@ async function start(): Promise<void> {
                         });
                     }
                 }
-
-                // Cleanup
                 const taskInfo = clientTasks.get(clientId);
                 if (taskInfo) {
                     for (const wid of taskInfo.workerIds) {
@@ -421,7 +434,7 @@ async function start(): Promise<void> {
         socket.on("disconnect", () => {
             console.log("[Worker] Disconnected", socket.id);
             const queueName = `tasks.worker_${socket.id}`;
-            channel?.deleteQueue(queueName);
+            channel.deleteQueue(queueName);
             workers.delete(socket.id);
             if (workerLocks.has(socket.id)) {
                 workerLocks.delete(socket.id);
@@ -430,17 +443,14 @@ async function start(): Promise<void> {
         });
     });
 
-    // klienci
     io.of("/client").on("connection", (socket) => {
         console.log("[Client] Connected", socket.id);
         clientSockets.set(socket.id, socket);
 
-        socket.on("start", async ({ workerIds, taskParams }: { workerIds: string[], taskParams: AllTaskParams }) => {
+        socket.on("start", async ({ workerIds, taskParams }) => {
             const clientId = socket.id;
-
             const selected = workerIds.filter(id => workers.has(id));
             const tasks = await createTasks(taskParams);
-
             const allAvailable = selected.every(id => !workerLocks.has(id));
 
             if (allAvailable) {
@@ -456,7 +466,7 @@ async function start(): Promise<void> {
                 clientStates.set(clientId, {
                     expected: tasks.length,
                     completed: 0,
-                    results: [], // Zamiast sum: 0
+                    results: [],
                     start: 0,
                     lastUpdate: 0,
                     method: taskParams.method,
@@ -477,7 +487,7 @@ async function start(): Promise<void> {
                     if (!workerQueue.has(id)) {
                         workerQueue.set(id, []);
                     }
-                    const queue = workerQueue.get(id)!;
+                    const queue = workerQueue.get(id);
                     if (!queue.includes(clientId)) {
                         queue.push(clientId);
                     }
@@ -527,89 +537,3 @@ async function start(): Promise<void> {
 }
 
 start();
-
-// Funkcja do wykonania getResult z WASM klienta
-async function executeClientGetResult(clientId: string, results: number[]): Promise<number> {
-    const customFunction = activeCustomFunctions.get(clientId);
-    if (!customFunction) {
-        console.log(`[Server] No custom function for client ${clientId}, returning sum`);
-        return results.reduce((sum, val) => sum + val, 0);
-    }
-
-    try {
-        const wasmPath = path.join(__dirname, '../../worker/temp', `${customFunction.sanitizedId}.wasm`);
-
-        console.log(`[Server] Loading WASM module for client ${clientId}`);
-        console.log(`[Server] Results to process: ${results.length}, first few: [${results.slice(0, 3).join(', ')}]`);
-        console.log(`[Server] JavaScript sum for verification: ${results.reduce((sum, val) => sum + val, 0)}`);
-
-        // Załaduj moduł WASM
-        const module = await loadWasmModule(wasmPath);
-
-        // Alokuj pamięć dla wyników - SPRAWDŹ WYRÓWNANIE
-        const resultsPtr = module._malloc(results.length * 8);
-        if (!resultsPtr) {
-            throw new Error('Failed to allocate memory in WASM');
-        }
-
-        console.log(`[Server] Allocated pointer: ${resultsPtr}`);
-        console.log(`[Server] Pointer alignment (should be 0): ${resultsPtr % 8}`);
-
-        // Jeśli pointer nie jest wyrównany, spróbuj alokować więcej i wyrównać ręcznie
-        let alignedPtr = resultsPtr;
-        if (resultsPtr % 8 !== 0) {
-            console.log(`[Server] Pointer not aligned, trying to fix...`);
-            module._free(resultsPtr);
-
-            // Alokuj więcej pamięci i wyrównaj
-            const oversizedPtr = module._malloc(results.length * 8 + 7);
-            alignedPtr = Math.ceil(oversizedPtr / 8) * 8;
-            console.log(`[Server] New aligned pointer: ${alignedPtr} (alignment: ${alignedPtr % 8})`);
-        }
-
-        try {
-            // Kopiuj wyniki do pamięci WASM
-            for (let i = 0; i < results.length; i++) {
-                const targetPtr = alignedPtr + i * 8;
-                module.setValue(targetPtr, results[i], 'double');
-            }
-
-            // Sprawdź czy dane zostały prawidłowo skopiowane (debug)
-            console.log(`[Server] First 3 values in WASM: [${[
-                module.getValue(resultsPtr, 'double'),
-                module.getValue(resultsPtr + 8, 'double'),
-                module.getValue(resultsPtr + 16, 'double')
-            ].join(', ')}]`);
-
-            // Wywołaj getResult lub _getResult
-            let finalResult: number;
-
-            console.log(`[Server] Attempting to call getResult function...`);
-
-            if (typeof module._getResult === 'function') {
-                console.log(`[Server] Using direct _getResult call`);
-                console.log(results.length);
-                finalResult = module._getResult(resultsPtr, results.length);
-            } else {
-                console.log(`[Server] Using ccall for _getResult`);
-                finalResult = module.ccall('_getResult', 'number', ['number', 'number'], [resultsPtr, results.length]);
-            }
-
-            console.log(`[Server] getResult returned: ${finalResult}`);
-
-            module._free(resultsPtr);
-            return finalResult;
-
-        } catch (execError) {
-            module._free(resultsPtr);
-            throw execError;
-        }
-
-    } catch (error) {
-        console.error(`[Server] Error executing getResult for client ${clientId}:`, error);
-        // Fallback do sumy
-        const fallbackSum = results.reduce((sum, val) => sum + val, 0);
-        console.log(`[Server] Using fallback sum: ${fallbackSum}`);
-        return fallbackSum;
-    }
-}
