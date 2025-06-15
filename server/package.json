@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "ts-node server.ts",
+    "dev": "ts-node ./src/server.ts",
     "dev:watch": "tsc --watch",
     "clean": "rm -rf dist"
   },

@@ -1,7 +1,7 @@
 import { Server } from "socket.io";
 import amqp, { Channel, Connection } from "amqplib";
 import http from "http";
-import express, { Request, Response } from "express"; // Dodaj typy Request i Response
+import express, { Request, Response } from "express";
 import multer from "multer";
 import cors from "cors";
 import { createTasks } from "./modules/create_tasks";
@@ -79,7 +79,7 @@ const activeCustomFunctions = new Map<string, ActiveCustomFunction>();
 let channel: Channel | null = null;
 let connection: any = null;
 
-const tempDir = path.join(__dirname, '../worker/temp');
+const tempDir = path.join(__dirname, '../../worker/temp');
 if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
 }
