@@ -1,16 +1,22 @@
-async function createTasks(taskParams) {
-    if (taskParams.method === "custom1D") {
-        return createCustom1DTasks(taskParams);
-    } else if (taskParams.method === "custom2D") {
-        return createCustom2DTasks(taskParams);
+import { TaskParams, Custom1DTaskParams, Custom2DTaskParams, AllTaskParams, Task } from './types';
+
+export async function createTasks(taskParams: AllTaskParams): Promise<Task[]> {
+    switch (taskParams.method) {
+        case "custom1D":
+            return createCustom1DTasks(taskParams);
+        case "custom2D":
+            return createCustom2DTasks(taskParams);
+        default:
+            // Używamy type assertion lub sprawdzamy methodę jako string
+            const exhaustiveCheck: never = taskParams;
+            throw new Error(`Unknown method: ${(taskParams as any).method}`);
     }
-    throw new Error(`Unknown method: ${taskParams.method}`);
 }
 
-function createCustom1DTasks(taskParams) {
+function createCustom1DTasks(taskParams: Custom1DTaskParams): Task[] {
     const [x1, x2, N, ...additionalParams] = taskParams.params;
     const fragment = (x2 - x1) / N;
-    const tasks = [];
+    const tasks: Task[] = [];
 
     for (let i = 0; i < N; i++) {
         const a = x1 + i * fragment;
@@ -27,7 +33,7 @@ function createCustom1DTasks(taskParams) {
     return tasks;
 }
 
-function createCustom2DTasks(taskParams) {
+function createCustom2DTasks(taskParams: Custom2DTaskParams): Task[] {
     const [x1, x2, y1, y2, N, ...additionalParams] = taskParams.params;
 
     const nx = Math.ceil(Math.sqrt(N));
@@ -36,7 +42,7 @@ function createCustom2DTasks(taskParams) {
     const fragmentX = (x2 - x1) / nx;
     const fragmentY = (y2 - y1) / ny;
 
-    const tasks = [];
+    const tasks: Task[] = [];
     let taskId = 0;
 
     for (let i = 0; i < nx && taskId < N; i++) {
@@ -60,5 +66,3 @@ function createCustom2DTasks(taskParams) {
     }
     return tasks;
 }
-
-module.exports = { createTasks };

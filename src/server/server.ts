@@ -1,13 +1,58 @@
-const { Server } = require("socket.io");
-const amqp = require("amqplib");
-const http = require("http");
-const express = require("express");
-const multer = require("multer");
-const cors = require("cors"); // Dodaj import cors
-const { createTasks } = require("./modules/create_tasks");
-const { createQueuePerClient } = require("./modules/queue");
-const fs = require('fs');
-const path = require('path');
+import { Server } from "socket.io";
+import amqp, { Channel, Connection } from "amqplib";
+import http from "http";
+import express, { Request, Response } from "express"; // Dodaj typy Request i Response
+import multer from "multer";
+import cors from "cors";
+import { createTasks } from "./modules/create_tasks";
+import { createQueuePerClient } from "./modules/queue";
+import { AllTaskParams, Task } from "./modules/types";
+import fs from 'fs';
+import path from 'path';
+
+interface WorkerInfo {
+    socket: any;
+    name: string;
+    benchmarkScore: number;
+    specs: {
+        platform: string;
+        userAgent: string;
+        language: string;
+        hardwareConcurrency: number;
+        deviceMemory: string | number;
+    };
+    performance: {
+        benchmarkScore: number;
+        latency: number;
+    };
+}
+
+interface ClientState {
+    expected: number;
+    completed: number;
+    sum: number;
+    start: number;
+    lastUpdate: number;
+    method: string;
+    totalSamples: number | null;
+}
+
+interface ClientTask {
+    socket: any;
+    workerIds: string[];
+}
+
+interface WaitingClient {
+    socket: any;
+    workerIds: string[];
+    tasks: Task[];
+    taskParams: AllTaskParams;
+}
+
+interface ActiveCustomFunction {
+    active: boolean;
+    sanitizedId: string;
+}
 
 const app = express();
 app.use(cors({
@@ -22,24 +67,24 @@ const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-const workers = new Map();
-const clientSockets = new Map();
-const clientTasks = new Map();
-const workerLocks = new Map();
-const workerQueue = new Map();
-const waitingClients = new Map();
-const clientStates = new Map();
-const activeCustomFunctions = new Map();
+const workers = new Map<string, WorkerInfo>();
+const clientSockets = new Map<string, any>();
+const clientTasks = new Map<string, ClientTask>();
+const workerLocks = new Map<string, string>();
+const workerQueue = new Map<string, string[]>();
+const waitingClients = new Map<string, WaitingClient>();
+const clientStates = new Map<string, ClientState>();
+const activeCustomFunctions = new Map<string, ActiveCustomFunction>();
 
-let channel = null;
-let connection = null;
+let channel: Channel | null = null;
+let connection: any = null;
 
 const tempDir = path.join(__dirname, '../worker/temp');
 if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
 }
 
-function sanitizeJsIdentifier(id) {
+function sanitizeJsIdentifier(id: string): string {
     if (!id || typeof id !== 'string') {
         return 'unknown_client';
     }
@@ -59,54 +104,52 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+// Poprawka dla handlera - dodaj void return i popraw typy
 app.post('/upload-wasm', upload.fields([
     { name: 'wasmFile', maxCount: 1 }
-]), (req, res) => {
+]), (req: Request, res: Response): void => {
     try {
         const { clientId, method } = req.body;
 
         if (!clientId) {
-            return res.json({
+            res.json({
                 success: false,
                 error: "Brak clientId w żądaniu"
             });
+            return;
         }
 
         const sanitizedId = sanitizeJsIdentifier(clientId);
 
-        if (!req.files || !req.files['wasmFile']) {
-            return res.json({
+        if (!req.files || !(req.files as any)['wasmFile']) {
+            res.json({
                 success: false,
                 error: "Brak wymaganego pliku WASM"
             });
+            return;
         }
 
-        // sciezka to pliku wasm
-        const wasmTempFile = req.files['wasmFile'][0];
-
-        // Docelowa ścieżka z poprawną nazwą
+        const wasmTempFile = (req.files as any)['wasmFile'][0];
         const wasmPath = path.join(tempDir, `${sanitizedId}.wasm`);
 
-        // przenosimy plik
         try {
             fs.renameSync(wasmTempFile.path, wasmPath);
         } catch (renameError) {
             console.error('[Server] Error renaming WASM file:', renameError);
-            return res.json({
+            res.json({
                 success: false,
                 error: "Błąd podczas zapisywania pliku WASM"
             });
+            return;
         }
 
         if (!fs.existsSync(wasmPath)) {
-            return res.json({
+            res.json({
                 success: false,
                 error: "Błąd podczas zapisywania pliku WASM"
             });
+            return;
         }
-
-        // console.log(`[Server] WASM file uploaded successfully for client ${clientId}:`);
-        // console.log(`[Server] WASM: ${wasmPath}`);
 
         activeCustomFunctions.set(clientId, {
             active: true,
@@ -134,20 +177,18 @@ app.post('/upload-wasm', upload.fields([
     }
 });
 
-function cleanupClientFiles(clientId, tempDir) {
+function cleanupClientFiles(clientId: string, tempDir: string): void {
     const sanitizedId = sanitizeJsIdentifier(clientId);
     const wasmFile = path.join(tempDir, `${sanitizedId}.wasm`);
 
     if (fs.existsSync(wasmFile)) {
         fs.unlinkSync(wasmFile);
-        // console.log(`[Server] Removed WASM file: ${wasmFile}`);
     }
 }
 
-// Endpoint statyczny dla plików temp (aby worker mógł je pobrać)
 app.use('/temp', express.static(tempDir));
 
-async function broadcastWorkerList() {
+async function broadcastWorkerList(): Promise<void> {
     const list = Array.from(workers.entries()).map(([id, worker]) => ({
         id,
         name: worker.name,
@@ -166,8 +207,8 @@ async function broadcastWorkerList() {
     io.of("/client").emit("worker_update", list);
 }
 
-async function broadcastQueueStatus() {
-    const queueStatus = {};
+async function broadcastQueueStatus(): Promise<void> {
+    const queueStatus: Record<string, any> = {};
     for (const [workerId] of workers.entries()) {
         const currentClient = workerLocks.get(workerId);
         const queue = workerQueue.get(workerId) || [];
@@ -186,7 +227,9 @@ async function broadcastQueueStatus() {
     io.of("/client").emit("queue_status", queueStatus);
 }
 
-async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTaskParams) {
+async function tasksDevider3000(tasks: Task[], clientId: string, selectedWorkerIds: string[], originalTaskParams: AllTaskParams): Promise<void> {
+    if (!channel) return;
+
     const benchmarks = selectedWorkerIds.map(id => ({
         id,
         benchmarkScore: workers.get(id)?.performance?.benchmarkScore || 0.1
@@ -198,12 +241,13 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
         count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length),
         batchSize: Math.max(50, Math.min(1000, Math.round(((workers.get(worker.id)?.performance?.benchmarkScore || 0.1) * 100) / 50) * 50))
     }));
+
     let assigned = taskCountPerWorker.reduce((sum, worker) => sum + worker.count, 0);
     let remaining = tasks.length - assigned;
 
     if (remaining > 0) {
         const workersByScore = [...taskCountPerWorker]
-            .sort((a, b) => (b.benchmarkScore || 0) - (a.benchmarkScore || 0));
+            .sort((a, b) => (workers.get(b.id)?.performance?.benchmarkScore || 0) - (workers.get(a.id)?.performance?.benchmarkScore || 0));
 
         for (let i = 0; remaining > 0; i = (i + 1) % workersByScore.length) {
             workersByScore[i].count += 1;
@@ -212,14 +256,14 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
     }
 
     let taskIndex = 0;
-    const workerTasks = new Map();
+    const workerTasks = new Map<string, Task[]>();
 
     for (const { id, count } of taskCountPerWorker) {
         if (!workerTasks.has(id)) {
             workerTasks.set(id, []);
         }
 
-        const workerTaskList = workerTasks.get(id);
+        const workerTaskList = workerTasks.get(id)!;
         for (let j = 0; j < count && taskIndex < tasks.length; j++) {
             const task = tasks[taskIndex];
             task.clientId = clientId;
@@ -229,8 +273,6 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
             taskIndex++;
         }
     }
-
-    // console.log(`[Server] Distributing tasks for method: ${originalTaskParams.method}, sanitizedId: ${originalTaskParams.sanitizedId}`);
 
     for (const { id, batchSize } of taskCountPerWorker) {
         const queueName = `tasks.worker_${id}`;
@@ -245,7 +287,7 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
     }
 }
 
-async function tryToGiveTasksForWaitingClients() {
+async function tryToGiveTasksForWaitingClients(): Promise<void> {
     for (const [clientId, pending] of waitingClients.entries()) {
         const allFree = pending.workerIds.every(id => !workerLocks.has(id));
         if (!allFree) continue;
@@ -269,21 +311,23 @@ async function tryToGiveTasksForWaitingClients() {
             start: 0,
             lastUpdate: 0,
             method: pending.taskParams.method,
-            totalSamples: pending.taskParams.method === 'custom1D' || pending.taskParams.method === 'custom2D' ? null : pending.taskParams.samples
+            totalSamples: pending.taskParams.method === 'custom1D' || pending.taskParams.method === 'custom2D' ? null : (pending.taskParams as any).samples
         });
         await tasksDevider3000(pending.tasks, clientId, pending.workerIds, pending.taskParams);
     }
 }
 
-async function start() {
-    connection = await amqp.connect("amqp://localhost");
-    channel = await connection.createChannel();
+async function start(): Promise<void> {
+    // Poprawka dla amqp connection
+    const conn = await amqp.connect("amqp://localhost");
+    connection = conn;
+    channel = await conn.createChannel();
 
-    //workerzy
+    // Worker connections
     io.of("/worker").on("connection", async (socket) => {
         console.log("[Worker] Connected", socket.id);
 
-        socket.on("register", async (workerInfo) => {
+        socket.on("register", async (workerInfo: any) => {
             const name = `${workerInfo?.system?.platform || 'Unknown'} (${workerInfo?.performance?.benchmarkScore?.toFixed(2) || '0.00'})`;
 
             workers.set(socket.id, {
@@ -303,11 +347,11 @@ async function start() {
                 }
             });
 
-            await createQueuePerClient(channel, socket.id, socket);
+            await createQueuePerClient(channel!, socket.id, socket);
             broadcastWorkerList();
         });
 
-        socket.on("batch_result", (data) => {
+        socket.on("batch_result", (data: any) => {
             const { clientId, result, tasksCount, method } = data;
             const state = clientStates.get(clientId);
 
@@ -365,7 +409,7 @@ async function start() {
         socket.on("disconnect", () => {
             console.log("[Worker] Disconnected", socket.id);
             const queueName = `tasks.worker_${socket.id}`;
-            channel.deleteQueue(queueName);
+            channel?.deleteQueue(queueName);
             workers.delete(socket.id);
             if (workerLocks.has(socket.id)) {
                 workerLocks.delete(socket.id);
@@ -374,15 +418,13 @@ async function start() {
         });
     });
 
-    //klienci
+    // Client connections
     io.of("/client").on("connection", (socket) => {
         console.log("[Client] Connected", socket.id);
         clientSockets.set(socket.id, socket);
 
-        socket.on("start", async ({ workerIds, taskParams }) => {
+        socket.on("start", async ({ workerIds, taskParams }: { workerIds: string[], taskParams: AllTaskParams }) => {
             const clientId = socket.id;
-
-            // console.log(`[Client] Starting task with method: ${taskParams.method}, sanitizedId: ${taskParams.sanitizedId}`);
 
             const selected = workerIds.filter(id => workers.has(id));
             const tasks = await createTasks(taskParams);
@@ -423,7 +465,7 @@ async function start() {
                     if (!workerQueue.has(id)) {
                         workerQueue.set(id, []);
                     }
-                    const queue = workerQueue.get(id);
+                    const queue = workerQueue.get(id)!;
                     if (!queue.includes(clientId)) {
                         queue.push(clientId);
                     }
