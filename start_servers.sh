@@ -4,12 +4,8 @@ echo "🟡      Runs RabbitMQ      🟡"
 sudo systemctl start rabbitmq
 
 echo "🟡  Runs worker http 8000  🟡"
-(cd src/worker && python3 -m http.server 8000) &
+(cd worker && python3 -m http.server 8000) &
 PID1=$!
-
-# echo "🟡  Runs client http 3000  🟡"
-# (cd src/client && python3 -m http.server 3000) &
-# PID2=$!
 
 trap cleanup INT
 

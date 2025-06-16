@@ -3,18 +3,13 @@
 sudo ufw allow 3000
 sudo ufw allow 8000
 sudo ufw allow 8080
-sudo ufw allow 8090
 
 echo "🟡      Runs RabbitMQ      🟡"
 sudo systemctl start rabbitmq
 
 echo "🟡  Runs worker http 8000  🟡"
-(cd src/worker && python3 -m http.server 8000 --bind 0.0.0.0) &
+(cd worker && python3 -m http.server 8000 --bind 0.0.0.0) &
 PID1=$!
-
-# echo "🟡  Runs client http 3000  🟡"
-# (cd src/client && python3 -m http.server 3000 --bind 0.0.0.0) &
-# PID2=$!
 
 trap cleanup INT
 
@@ -27,7 +22,6 @@ cleanup() {
     sudo ufw delete allow 3000
     sudo ufw delete allow 8000
     sudo ufw delete allow 8080
-    sudo ufw delete allow 8090
 
     echo "🛑 RabbitMQ 🛑"
     sudo rabbitmqctl purge_queue tasks

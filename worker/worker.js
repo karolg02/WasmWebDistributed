@@ -157,7 +157,7 @@ async function processBatch(batch, moduleInstance) {
     const batchB = batch[0].b;
 
     let tasksProcessedInCurrentChunk = 0;
-    let sumForCurrentChunk = 0;
+    let resultsForCurrentChunk = []; // ❌ Zmień z sumForCurrentChunk na tablicę
     const TASKS_PER_PROGRESS_UPDATE = 10;
     const TASKS_BETWEEN_YIELDS = 10;
 
@@ -188,7 +188,7 @@ async function processBatch(batch, moduleInstance) {
                 }
 
                 if (result !== undefined && !isNaN(result)) {
-                    sumForCurrentChunk += result;
+                    resultsForCurrentChunk.push(result); // ❌ Dodaj do tablicy zamiast sumować
                     tasksProcessedInCurrentChunk++;
                 } else {
                     console.error(`[Worker] Invalid result from task ${data.taskId}:`, result);
@@ -204,7 +204,7 @@ async function processBatch(batch, moduleInstance) {
                     data: {
                         batchId: originalBatchId,
                         clientId: clientId,
-                        partialResult: sumForCurrentChunk,
+                        results: resultsForCurrentChunk,
                         tasksProcessedInChunk: tasksProcessedInCurrentChunk,
                         totalTasksInBatch: batch.length,
                         isFinalChunk: (i + 1) === batch.length,
@@ -213,7 +213,7 @@ async function processBatch(batch, moduleInstance) {
                         b: batchB
                     }
                 });
-                sumForCurrentChunk = 0;
+                resultsForCurrentChunk = [];
                 tasksProcessedInCurrentChunk = 0;
             }
             if ((i + 1) % TASKS_BETWEEN_YIELDS === 0 && i < batch.length - 1) {
