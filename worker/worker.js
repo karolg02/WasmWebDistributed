@@ -1,8 +1,7 @@
 try {
     importScripts('benchmark/benchmark.js');
 } catch (e) {
-    console.error('[Worker] Failed to import scripts:', e);
-    self.postMessage({ type: 'worker_error', data: { error: 'Failed to import critical scripts: ' + e.message } });
+    self.postMessage({ type: 'worker_error', data: { error: 'Cannot import benchmark script: ' + e.message } });
     throw e;
 }
 
@@ -28,12 +27,10 @@ function runBenchmark() {
             score = (1 / Math.max(0.01, (t1 - t0))).toFixed(4) * 1000;
             self.postMessage({ type: 'benchmark_result', score: score });
         }).catch(error => {
-            console.error("[Worker] Error during benchmark module initialization:", error);
             score = 0;
             self.postMessage({ type: 'benchmark_result', score: score, error: error.message });
         });
     } else {
-        console.error("[Worker] BenchmarkModule is not defined.");
         score = 0;
         self.postMessage({ type: 'benchmark_result', score: score, error: 'BenchmarkModule not defined' });
     }
@@ -62,13 +59,11 @@ self.onmessage = async function (event) {
                 }
 
                 if (!moduleToUse) {
-                    console.error(`[Worker] Module for clientId ${clientId} could not be loaded or retrieved.`);
                     self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: "Module not available for processing." } });
                     return;
                 }
                 processBatch(batch, moduleToUse);
             } catch (error) {
-                console.error(`[Worker] Error processing task_batch for clientId ${clientId}:`, error);
                 self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Error during task processing: ${error.message}` } });
             }
             break;
@@ -81,7 +76,6 @@ self.onmessage = async function (event) {
                 };
                 await loadClientModule(wasmClientId, wasmSanitizedId, customModuleArgs);
             } catch (error) {
-                console.error(`[Worker] Error reloading custom WASM for ${wasmClientId}:`, error);
                 self.postMessage({ type: 'worker_error', data: { clientId: wasmClientId, error: `Failed to reload custom WASM: ${error.message}` } });
             }
             break;
@@ -100,11 +94,8 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
     try {
         const loaderUrl = `temp/${sanitizedId}.js`;
         try {
-            console.log(`[Worker] Loading client loader: ${loaderUrl}`);
             importScripts(loaderUrl);
-            console.log(`[Worker] Successfully imported client loader: ${loaderUrl}`);
         } catch (importError) {
-            console.error(`[Worker] Failed to import client loader: ${loaderUrl}`, importError);
             throw new Error(`Failed to import client loader: ${importError.message}`);
         }
         const clientModuleFactory = self['Module'];
@@ -114,7 +105,6 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
         }
         const instance = await clientModuleFactory({
             locateFile: (path, prefix) => {
-                console.log(`[Worker] locateFile called for client ${clientId}: ${path}`);
                 if (path.endsWith('.wasm')) {
                     return `temp/${sanitizedId}.wasm`;
                 }
@@ -127,7 +117,6 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
         return instance;
 
     } catch (error) {
-        console.error(`[Worker] Error creating module instance for client ${clientId}:`, error);
         self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Failed to create module instance: ${error.message}` } });
         throw error;
     }
@@ -147,7 +136,7 @@ async function processBatch(batch, moduleInstance) {
     const batchB = batch[0].b;
 
     let tasksProcessedInCurrentChunk = 0;
-    let resultsForCurrentChunk = []; // ❌ Zmień z sumForCurrentChunk na tablicę
+    let resultsForCurrentChunk = [];
     const TASKS_PER_PROGRESS_UPDATE = 10;
     const TASKS_BETWEEN_YIELDS = 10;
 
@@ -165,26 +154,23 @@ async function processBatch(batch, moduleInstance) {
             let result;
 
             try {
-                if (data.method === 'custom1D' || data.method === 'custom2D') {
-                    const params = data.paramsArray;
-                    for (let j = 0; j < params.length; j++) {
-                        moduleInstance.setValue(sharedArrayPtr + j * 8, params[j], 'double');
-                    }
-                    result = moduleInstance.ccall(
-                        "main_function", "number",
-                        ["number"],
-                        [sharedArrayPtr]
-                    );
+                const params = data.paramsArray;
+                for (let j = 0; j < params.length; j++) {
+                    moduleInstance.setValue(sharedArrayPtr + j * 8, params[j], 'double');
                 }
+                result = moduleInstance.ccall(
+                    "main_function", "number",
+                    ["number"],
+                    [sharedArrayPtr]
+                );
 
                 if (result !== undefined && !isNaN(result)) {
-                    resultsForCurrentChunk.push(result); // ❌ Dodaj do tablicy zamiast sumować
+                    resultsForCurrentChunk.push(result);
                     tasksProcessedInCurrentChunk++;
                 } else {
                     console.error(`[Worker] Invalid result from task ${data.taskId}:`, result);
                 }
             } catch (e) {
-                console.error(`[Worker] Error executing ccall for task ${data.taskId} (method: ${data.method}):`, e);
                 self.postMessage({ type: 'task_error', data: { taskId: data.taskId, clientId: clientId, error: `ccall execution failed: ${e.message}` } });
             }
 
@@ -215,7 +201,7 @@ async function processBatch(batch, moduleInstance) {
     }
 }
 
-self.onerror = function (message, source, lineno, colno, error) {
+self.onerror = function (message, source, lineno) {
     self.postMessage({ type: 'worker_error', data: { error: `Uncaught: ${message}`, source: source, lineno: lineno } });
     return true;
 };

@@ -10,13 +10,14 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
+app.use(express.json());
 app.use(cors({
     origin: "*",
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-app.use(express.json());
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*" }
@@ -46,7 +47,7 @@ function sanitizeJsIdentifier(id) {
     return id.replace(/[^a-zA-Z0-9_]/g, '_');
 }
 
-async function executeClientGetResult(clientId, results) {
+async function getClientResult(clientId, results) {
     const customFunction = activeCustomFunctions.get(clientId);
     if (!customFunction) {
         const sum = results.reduce((sum, val) => sum + val, 0);
@@ -70,7 +71,7 @@ async function executeClientGetResult(clientId, results) {
 
         const module = await ModuleFactory({
             locateFile: (filename) => {
-                if (filename.endsWith('.wasm') || filename === 'monte_carlo.wasm') {
+                if (filename.endsWith('.wasm')) {
                     return wasmPath;
                 }
                 return filename;
@@ -79,7 +80,7 @@ async function executeClientGetResult(clientId, results) {
 
         const resultsPtr = module._malloc(results.length * 8);
         if (!resultsPtr) {
-            throw new Error('Failed to allocate memory in WASM');
+            throw new Error('[Server] Failed to allocate memory for getting results in WASM');
         }
 
         try {
@@ -133,7 +134,6 @@ async function executeClientGetResult(clientId, results) {
         }
 
     } catch (error) {
-        console.error(`[Server] Error executing getResult for ${clientId}:`, error);
         const fallbackSum = results.reduce((sum, val) => sum + val, 0);
         return `Błąd! Suma fallback: ${fallbackSum}, Liczba: ${results.length}`;
     }
@@ -202,7 +202,6 @@ app.post('/upload-wasm', upload.fields([
         });
 
     } catch (error) {
-        console.error('[Server] Upload error:', error);
         res.json({
             success: false,
             error: "Błąd serwera podczas przetwarzania plików"
@@ -210,7 +209,8 @@ app.post('/upload-wasm', upload.fields([
     }
 });
 
-function cleanupClientFiles(clientId, tempDir) {
+//funkcja do czyszczenia plikow klienta
+function deleteClientFiles(clientId, tempDir) {
     const sanitizedId = sanitizeJsIdentifier(clientId);
     const wasmFile = path.join(tempDir, `${sanitizedId}.wasm`);
     const loaderFile = path.join(tempDir, `${sanitizedId}.js`);
@@ -242,7 +242,7 @@ async function broadcastWorkerList() {
     io.of("/client").emit("worker_update", list);
 }
 
-async function broadcastQueueStatus() {
+async function broadcastWorkerQueueList() {
     const queueStatus = {};
     for (const [workerId] of workers.entries()) {
         const currentClient = workerLocks.get(workerId);
@@ -352,6 +352,7 @@ async function start() {
     connection = await amqp.connect("amqp://localhost");
     channel = await connection.createChannel();
 
+    //workerzy
     io.of("/worker").on("connection", async (socket) => {
         console.log("[Worker] Connected", socket.id);
 
@@ -413,7 +414,7 @@ async function start() {
 
             if (state.completed === state.expected) {
                 try {
-                    const rawResult = await executeClientGetResult(clientId, state.results);
+                    const rawResult = await getClientResult(clientId, state.results);
                     const clientSocket = clientSockets.get(clientId);
 
                     if (clientSocket) {
@@ -424,7 +425,6 @@ async function start() {
                         });
                     }
                 } catch (error) {
-                    console.error(`[Server] Error in getResult for ${clientId}:`, error);
                     const fallbackSum = state.results.reduce((sum, val) => sum + val, 0);
                     const clientSocket = clientSockets.get(clientId);
                     if (clientSocket) {
@@ -448,7 +448,7 @@ async function start() {
 
                 clientStates.delete(clientId);
                 tryToGiveTasksForWaitingClients();
-                broadcastQueueStatus();
+                broadcastWorkerQueueList();
             }
         });
 
@@ -468,6 +468,7 @@ async function start() {
         });
     });
 
+    //klienci
     io.of("/client").on("connection", (socket) => {
         console.log("[Client] Connected", socket.id);
         clientSockets.set(socket.id, socket);
@@ -499,7 +500,7 @@ async function start() {
                 });
 
                 await tasksDevider3000(tasks, clientId, selected, taskParams);
-                broadcastQueueStatus();
+                broadcastWorkerQueueList();
             } else {
                 waitingClients.set(clientId, {
                     socket,
@@ -517,13 +518,13 @@ async function start() {
                         queue.push(clientId);
                     }
                 }
-                broadcastQueueStatus();
+                broadcastWorkerQueueList();
             }
         });
 
         socket.on("request_worker_list", () => {
             broadcastWorkerList();
-            broadcastQueueStatus();
+            broadcastWorkerQueueList();
         });
 
         socket.on("disconnect", () => {
@@ -546,10 +547,11 @@ async function start() {
             for (const [wid, queue] of workerQueue.entries()) {
                 workerQueue.set(wid, queue.filter(cid => cid !== socket.id));
             }
-            broadcastQueueStatus();
+            broadcastWorkerQueueList();
 
+            // czyszczenie plikow od klienta
             if (activeCustomFunctions.has(socket.id)) {
-                cleanupClientFiles(socket.id, tempDir);
+                deleteClientFiles(socket.id, tempDir);
                 activeCustomFunctions.delete(socket.id);
                 io.of("/worker").emit("unload_custom_wasm", { clientId: socket.id, sanitizedId: sanitizeJsIdentifier(socket.id) });
             }
