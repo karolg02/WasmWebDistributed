@@ -1,30 +1,12 @@
 try {
     importScripts('benchmark/benchmark.js');
 } catch (e) {
-    console.error('[Worker] Failed to import scripts:', e);
-    self.postMessage({ type: 'worker_error', data: { error: 'Failed to import critical scripts: ' + e.message } });
+    self.postMessage({ type: 'worker_error', data: { error: 'Cannot import benchmark script: ' + e.message } });
     throw e;
 }
 
 let score;
 const clientModules = new Map();
-let globalModuleFactory = null;
-
-async function initializeGlobalModule() {
-    try {
-        if (!globalModuleFactory) {
-            importScripts('./loader.js');
-            if (typeof self['Module'] === 'function') {
-                globalModuleFactory = self['Module'];
-            } else {
-                throw new Error('Module factory not found in loader.js');
-            }
-        }
-    } catch (error) {
-        console.error('[Worker] Error loading global module:', error);
-        throw error;
-    }
-}
 
 function runBenchmark() {
     if (typeof BenchmarkModule === 'function') {
@@ -44,18 +26,11 @@ function runBenchmark() {
             const t1 = performance.now();
             score = (1 / Math.max(0.01, (t1 - t0))).toFixed(4) * 1000;
             self.postMessage({ type: 'benchmark_result', score: score });
-
-            // po zakończeniu ladujemy globalny modul loadera
-            initializeGlobalModule().then().catch(error => {
-                console.error('[Worker] Failed to initialize global module after benchmark:', error);
-            });
         }).catch(error => {
-            console.error("[Worker] Error during benchmark module initialization:", error);
             score = 0;
             self.postMessage({ type: 'benchmark_result', score: score, error: error.message });
         });
     } else {
-        console.error("[Worker] BenchmarkModule is not defined.");
         score = 0;
         self.postMessage({ type: 'benchmark_result', score: score, error: 'BenchmarkModule not defined' });
     }
@@ -84,13 +59,11 @@ self.onmessage = async function (event) {
                 }
 
                 if (!moduleToUse) {
-                    console.error(`[Worker] Module for clientId ${clientId} could not be loaded or retrieved.`);
                     self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: "Module not available for processing." } });
                     return;
                 }
                 processBatch(batch, moduleToUse);
             } catch (error) {
-                console.error(`[Worker] Error processing task_batch for clientId ${clientId}:`, error);
                 self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Error during task processing: ${error.message}` } });
             }
             break;
@@ -103,7 +76,6 @@ self.onmessage = async function (event) {
                 };
                 await loadClientModule(wasmClientId, wasmSanitizedId, customModuleArgs);
             } catch (error) {
-                console.error(`[Worker] Error reloading custom WASM for ${wasmClientId}:`, error);
                 self.postMessage({ type: 'worker_error', data: { clientId: wasmClientId, error: `Failed to reload custom WASM: ${error.message}` } });
             }
             break;
@@ -120,11 +92,18 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
     }
 
     try {
-        if (!globalModuleFactory) {
-            await initializeGlobalModule();
+        const loaderUrl = `temp/${sanitizedId}.js`;
+        try {
+            importScripts(loaderUrl);
+        } catch (importError) {
+            throw new Error(`Failed to import client loader: ${importError.message}`);
         }
+        const clientModuleFactory = self['Module'];
 
-        const instance = await globalModuleFactory(moduleArgs || {
+        if (!clientModuleFactory || typeof clientModuleFactory !== 'function') {
+            throw new Error(`Client module factory not found for ${clientId}. Expected 'Module' function in global scope after importing ${loaderUrl}`);
+        }
+        const instance = await clientModuleFactory({
             locateFile: (path, prefix) => {
                 if (path.endsWith('.wasm')) {
                     return `temp/${sanitizedId}.wasm`;
@@ -136,8 +115,8 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
         clientModules.set(clientId, instance);
         self.postMessage({ type: 'custom_module_loaded', data: { clientId } });
         return instance;
+
     } catch (error) {
-        console.error(`[Worker] Error creating module instance for client ${clientId}:`, error);
         self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Failed to create module instance: ${error.message}` } });
         throw error;
     }
@@ -157,7 +136,7 @@ async function processBatch(batch, moduleInstance) {
     const batchB = batch[0].b;
 
     let tasksProcessedInCurrentChunk = 0;
-    let resultsForCurrentChunk = []; // ❌ Zmień z sumForCurrentChunk na tablicę
+    let resultsForCurrentChunk = [];
     const TASKS_PER_PROGRESS_UPDATE = 10;
     const TASKS_BETWEEN_YIELDS = 10;
 
@@ -175,26 +154,23 @@ async function processBatch(batch, moduleInstance) {
             let result;
 
             try {
-                if (data.method === 'custom1D' || data.method === 'custom2D') {
-                    const params = data.paramsArray;
-                    for (let j = 0; j < params.length; j++) {
-                        moduleInstance.setValue(sharedArrayPtr + j * 8, params[j], 'double');
-                    }
-                    result = moduleInstance.ccall(
-                        "main_function", "number",
-                        ["number"],
-                        [sharedArrayPtr]
-                    );
+                const params = data.paramsArray;
+                for (let j = 0; j < params.length; j++) {
+                    moduleInstance.setValue(sharedArrayPtr + j * 8, params[j], 'double');
                 }
+                result = moduleInstance.ccall(
+                    "main_function", "number",
+                    ["number"],
+                    [sharedArrayPtr]
+                );
 
                 if (result !== undefined && !isNaN(result)) {
-                    resultsForCurrentChunk.push(result); // ❌ Dodaj do tablicy zamiast sumować
+                    resultsForCurrentChunk.push(result);
                     tasksProcessedInCurrentChunk++;
                 } else {
                     console.error(`[Worker] Invalid result from task ${data.taskId}:`, result);
                 }
             } catch (e) {
-                console.error(`[Worker] Error executing ccall for task ${data.taskId} (method: ${data.method}):`, e);
                 self.postMessage({ type: 'task_error', data: { taskId: data.taskId, clientId: clientId, error: `ccall execution failed: ${e.message}` } });
             }
 
@@ -225,7 +201,7 @@ async function processBatch(batch, moduleInstance) {
     }
 }
 
-self.onerror = function (message, source, lineno, colno, error) {
+self.onerror = function (message, source, lineno) {
     self.postMessage({ type: 'worker_error', data: { error: `Uncaught: ${message}`, source: source, lineno: lineno } });
     return true;
 };
