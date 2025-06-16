@@ -59,8 +59,8 @@ emcc *.cpp -o *.js   -sEXPORTED_FUNCTIONS=_main_function,_getResult,_freeResult,
 
 1. **Clone the repository**
     ```bash
-    git clone https://github.com/yourusername/wasmWebDistributed.git
-    cd wasmWebDistributed
+    git clone https://github.com/yourusername/WasmWebDistributed.git
+    cd WasmWebDistributed
     ```
 
 2. **Install server dependencies**
@@ -71,7 +71,7 @@ emcc *.cpp -o *.js   -sEXPORTED_FUNCTIONS=_main_function,_getResult,_freeResult,
 
 3. **Install client dependencies**
     ```bash
-    cd ../client
+    cd client
     npm i
     ```
 
