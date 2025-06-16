@@ -55,10 +55,14 @@ async function executeClientGetResult(clientId, results) {
 
     try {
         const wasmPath = path.join(__dirname, '../../worker/temp', `${customFunction.sanitizedId}.wasm`);
-        const loaderPath = path.join(__dirname, '../loader.js');
+        const loaderPath = path.join(__dirname, '../../worker/temp', `${customFunction.sanitizedId}.js`);
 
         if (!fs.existsSync(loaderPath)) {
-            throw new Error(`Loader not found: ${loaderPath}`);
+            throw new Error(`Client loader not found: ${loaderPath}`);
+        }
+
+        if (!fs.existsSync(wasmPath)) {
+            throw new Error(`Client WASM not found: ${wasmPath}`);
         }
 
         delete require.cache[require.resolve(loaderPath)];
@@ -149,7 +153,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 app.post('/upload-wasm', upload.fields([
-    { name: 'wasmFile', maxCount: 1 }
+    { name: 'wasmFile', maxCount: 1 },
+    { name: 'loaderFile', maxCount: 1 }
 ]), (req, res) => {
     try {
         const { clientId, method } = req.body;
@@ -163,29 +168,19 @@ app.post('/upload-wasm', upload.fields([
 
         const sanitizedId = sanitizeJsIdentifier(clientId);
 
-        if (!req.files || !req.files['wasmFile']) {
-            return res.json({
-                success: false,
-                error: "Brak wymaganego pliku WASM"
-            });
-        }
-
         const wasmTempFile = req.files['wasmFile'][0];
+        const loaderTempFile = req.files['loaderFile'][0];
+
         const wasmPath = path.join(tempDir, `${sanitizedId}.wasm`);
+        const loaderPath = path.join(tempDir, `${sanitizedId}.js`);
 
         try {
             fs.renameSync(wasmTempFile.path, wasmPath);
+            fs.renameSync(loaderTempFile.path, loaderPath);
         } catch (renameError) {
             return res.json({
                 success: false,
-                error: "Błąd podczas zapisywania pliku WASM"
-            });
-        }
-
-        if (!fs.existsSync(wasmPath)) {
-            return res.json({
-                success: false,
-                error: "Błąd podczas zapisywania pliku WASM"
+                error: "Błąd podczas zapisywania plików"
             });
         }
 
@@ -202,7 +197,7 @@ app.post('/upload-wasm', upload.fields([
 
         res.json({
             success: true,
-            message: "Plik WASM przesłany pomyślnie",
+            message: "Pliki przesłane pomyślnie",
             sanitizedId: sanitizedId
         });
 
@@ -210,7 +205,7 @@ app.post('/upload-wasm', upload.fields([
         console.error('[Server] Upload error:', error);
         res.json({
             success: false,
-            error: "Błąd serwera podczas przetwarzania pliku"
+            error: "Błąd serwera podczas przetwarzania plików"
         });
     }
 });
@@ -218,9 +213,11 @@ app.post('/upload-wasm', upload.fields([
 function cleanupClientFiles(clientId, tempDir) {
     const sanitizedId = sanitizeJsIdentifier(clientId);
     const wasmFile = path.join(tempDir, `${sanitizedId}.wasm`);
+    const loaderFile = path.join(tempDir, `${sanitizedId}.js`);
 
-    if (fs.existsSync(wasmFile)) {
+    if (fs.existsSync(wasmFile) && fs.existsSync(loaderFile)) {
         fs.unlinkSync(wasmFile);
+        fs.unlinkSync(loaderFile);
     }
 }
 

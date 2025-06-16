@@ -47,17 +47,25 @@ export function TasksPanel() {
         const taskParams = currentMethod === 'custom1D' ? customParams1D : customParams2D;
         const form = e.target as HTMLFormElement;
         const wasmInput = form.querySelector('input[type="file"][accept=".wasm"]') as HTMLInputElement;
+        const loaderInput = form.querySelector('input[type="file"][accept=".js"]') as HTMLInputElement;
 
         const selectedWasmFile = wasmInput?.files?.[0];
+        const selectedLoaderFile = loaderInput?.files?.[0];
 
         if (!selectedWasmFile) {
             setError("Musisz przesłać plik WASM");
             return;
         }
 
+        if (!selectedLoaderFile) {
+            setError("Musisz przesłać plik loader.js");
+            return;
+        }
+
         try {
             const uploadFormData = new FormData();
             uploadFormData.append('wasmFile', selectedWasmFile);
+            uploadFormData.append('loaderFile', selectedLoaderFile);
             uploadFormData.append('clientId', socket?.id || '');
             uploadFormData.append('method', currentMethod);
 

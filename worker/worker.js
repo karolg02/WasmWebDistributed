@@ -8,23 +8,6 @@ try {
 
 let score;
 const clientModules = new Map();
-let globalModuleFactory = null;
-
-async function initializeGlobalModule() {
-    try {
-        if (!globalModuleFactory) {
-            importScripts('./loader.js');
-            if (typeof self['Module'] === 'function') {
-                globalModuleFactory = self['Module'];
-            } else {
-                throw new Error('Module factory not found in loader.js');
-            }
-        }
-    } catch (error) {
-        console.error('[Worker] Error loading global module:', error);
-        throw error;
-    }
-}
 
 function runBenchmark() {
     if (typeof BenchmarkModule === 'function') {
@@ -44,11 +27,6 @@ function runBenchmark() {
             const t1 = performance.now();
             score = (1 / Math.max(0.01, (t1 - t0))).toFixed(4) * 1000;
             self.postMessage({ type: 'benchmark_result', score: score });
-
-            // po zakończeniu ladujemy globalny modul loadera
-            initializeGlobalModule().then().catch(error => {
-                console.error('[Worker] Failed to initialize global module after benchmark:', error);
-            });
         }).catch(error => {
             console.error("[Worker] Error during benchmark module initialization:", error);
             score = 0;
@@ -120,12 +98,23 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
     }
 
     try {
-        if (!globalModuleFactory) {
-            await initializeGlobalModule();
+        const loaderUrl = `temp/${sanitizedId}.js`;
+        try {
+            console.log(`[Worker] Loading client loader: ${loaderUrl}`);
+            importScripts(loaderUrl);
+            console.log(`[Worker] Successfully imported client loader: ${loaderUrl}`);
+        } catch (importError) {
+            console.error(`[Worker] Failed to import client loader: ${loaderUrl}`, importError);
+            throw new Error(`Failed to import client loader: ${importError.message}`);
         }
+        const clientModuleFactory = self['Module'];
 
-        const instance = await globalModuleFactory(moduleArgs || {
+        if (!clientModuleFactory || typeof clientModuleFactory !== 'function') {
+            throw new Error(`Client module factory not found for ${clientId}. Expected 'Module' function in global scope after importing ${loaderUrl}`);
+        }
+        const instance = await clientModuleFactory({
             locateFile: (path, prefix) => {
+                console.log(`[Worker] locateFile called for client ${clientId}: ${path}`);
                 if (path.endsWith('.wasm')) {
                     return `temp/${sanitizedId}.wasm`;
                 }
@@ -136,6 +125,7 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
         clientModules.set(clientId, instance);
         self.postMessage({ type: 'custom_module_loaded', data: { clientId } });
         return instance;
+
     } catch (error) {
         console.error(`[Worker] Error creating module instance for client ${clientId}:`, error);
         self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Failed to create module instance: ${error.message}` } });

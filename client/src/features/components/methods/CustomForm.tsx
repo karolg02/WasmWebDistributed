@@ -19,6 +19,7 @@ export const CustomForm: React.FC<CustomFormProps> = ({
     is2D
 }) => {
     const [wasmFile, setWasmFile] = useState<File | null>(null);
+    const [loaderFile, setLoaderFile] = useState<File | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
 
     const handleFormSubmit = (e: React.FormEvent) => {
@@ -29,8 +30,18 @@ export const CustomForm: React.FC<CustomFormProps> = ({
             return;
         }
 
+        if (!loaderFile) {
+            setUploadError("Musisz przesłać plik loader.js");
+            return;
+        }
+
         if (!wasmFile.name.endsWith('.wasm')) {
             setUploadError("Plik WASM musi mieć rozszerzenie .wasm");
+            return;
+        }
+
+        if (!loaderFile.name.endsWith('.js')) {
+            setUploadError("Plik loader musi mieć rozszerzenie .js");
             return;
         }
 
@@ -110,6 +121,28 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         accept=".wasm"
                         value={wasmFile}
                         onChange={setWasmFile}
+                        leftSection={<IconUpload size={14} />}
+                        disabled={disabled}
+                        required
+                        styles={{
+                            input: {
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                color: 'white',
+                                '&::placeholder': { color: 'rgba(255, 255, 255, 0.5)' }
+                            },
+                            label: { color: 'white', fontWeight: 500 },
+                            description: { color: 'rgba(255, 255, 255, 0.7)' }
+                        }}
+                    />
+
+                    <FileInput
+                        label="Plik loader.js"
+                        description="Loader JavaScript wygenerowany przez Emscripten (dla workerów)"
+                        placeholder="Wybierz plik loader.js"
+                        accept=".js"
+                        value={loaderFile}
+                        onChange={setLoaderFile}
                         leftSection={<IconUpload size={14} />}
                         disabled={disabled}
                         required
@@ -296,15 +329,15 @@ export const CustomForm: React.FC<CustomFormProps> = ({
                         radius="lg"
                         fullWidth
                         size="lg"
-                        disabled={disabled || !wasmFile}
+                        disabled={disabled || !wasmFile || !loaderFile}
                         leftSection={<IconPlayerPlay size={16} />}
                         style={{
-                            background: disabled || !wasmFile ?
+                            background: disabled || !wasmFile || !loaderFile ?
                                 'rgba(255, 255, 255, 0.1)' :
                                 'linear-gradient(45deg, #7950f2, #9775fa)',
                             border: 'none',
                             transition: 'all 0.3s ease',
-                            '&:hover': !disabled && wasmFile ? {
+                            '&:hover': !disabled && wasmFile && loaderFile ? {
                                 transform: 'translateY(-2px)',
                                 boxShadow: '0 8px 25px rgba(121, 80, 242, 0.4)',
                             } : {}
