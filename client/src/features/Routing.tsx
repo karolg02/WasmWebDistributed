@@ -1,6 +1,6 @@
 import { RouteObject, useRoutes } from "react-router-dom";
 import { TasksPanel } from "./taskspanel/TasksPanel";
-import { Layout } from "../components/Layout";
+import { Layout } from "../layout/Layout";
 import { MainPage } from "./mainpage/MainPage";
 import { ClientAcc } from "./clientacc/ClientAcc";
 import { Help } from "./help/Help";

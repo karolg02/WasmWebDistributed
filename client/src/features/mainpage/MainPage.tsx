@@ -38,7 +38,7 @@ export function MainPage() {
             <Title order={2} mb="xl" c="white" ta="center">
                 <Group justify="center" gap="sm">
                     <IconSparkles size={32} />
-                    <span>Potrzebujesz pomocy z WASM?</span>
+                    <span>Potrzebujesz pomocy?</span>
                 </Group>
             </Title>
 
