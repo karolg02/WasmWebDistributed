@@ -52,8 +52,10 @@ self.onmessage = async function (event) {
             try {
                 moduleToUse = clientModules.get(clientId);
                 if (!moduleToUse) {
+                    const isDocker = self.location && (self.location.hostname !== 'localhost' && self.location.hostname !== '127.0.0.1');
+                    const serverHost = isDocker ? 'server' : self.location.hostname;
                     const customModuleArgs = {
-                        locateFile: (path, prefix) => `temp/${sanitizedId}.wasm`
+                        locateFile: (path, prefix) => `http://${serverHost}:8080/temp/${sanitizedId}.wasm`
                     };
                     moduleToUse = await loadClientModule(clientId, sanitizedId, customModuleArgs);
                 }
@@ -92,11 +94,14 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
     }
 
     try {
-        const loaderUrl = `temp/${sanitizedId}.js`;
+        const isDocker = self.location && (self.location.hostname !== 'localhost' && self.location.hostname !== '127.0.0.1');
+        const serverHost = isDocker ? 'server' : self.location.hostname;
+        const loaderUrl = `http://${serverHost}:8080/temp/${sanitizedId}.js`;
+        
         try {
             importScripts(loaderUrl);
         } catch (importError) {
-            throw new Error(`Failed to import client loader: ${importError.message}`);
+            throw new Error(`Failed to import client loader from ${loaderUrl}: ${importError.message}`);
         }
         const clientModuleFactory = self['Module'];
 
@@ -106,9 +111,9 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
         const instance = await clientModuleFactory({
             locateFile: (path, prefix) => {
                 if (path.endsWith('.wasm')) {
-                    return `temp/${sanitizedId}.wasm`;
+                    return `http://${serverHost}:8080/temp/${sanitizedId}.wasm`;
                 }
-                return `temp/${path}`;
+                return `http://${serverHost}:8080/temp/${path}`;
             }
         });
 

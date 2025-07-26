@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import io from "socket.io-client";
+import { useSocketContext } from "../../context/Socket";
 import { Worker } from "../types/Worker";
 import { Progress, QueueStatus, AllTaskParams } from "../types/types";
 
-const socket = io(`http://${window.location.hostname}:8080/client`);
-
 export const useSocket = () => {
+    const socket = useSocketContext();
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
     const [progress, setProgress] = useState<Progress>({ done: 0, elapsedTime: 0 });
@@ -35,7 +34,7 @@ export const useSocket = () => {
             socket.off("final_result");
             socket.off("queue_status");
         };
-    }, []);
+    }, [socket]);
 
     const startTask = async (taskParams: AllTaskParams, workerIds: string[]) => {
         setIsCalculating(true);
