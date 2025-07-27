@@ -164,10 +164,7 @@
             }
 
             function initializeMainConnection() {
-                const serverHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-                    ? window.location.hostname 
-                    : 'server';
-                socket = io(`http://${serverHost}:8080/worker`);
+                socket = io(`http://${window.location.hostname}:8080/worker`);
 
                 socket.on("connect", () => {
                     statusDiv.textContent += '\nPołączono z serwerem. Mierzenie opóźnienia...';

@@ -33,9 +33,8 @@ const clientStates = new Map();
 const activeCustomFunctions = new Map();
 
 let channel = null;
-let connection = null;
 
-const tempDir = path.join(__dirname, '../../worker/temp');
+const tempDir = path.join(__dirname, '../temp');
 if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
 }
@@ -352,8 +351,7 @@ async function tryToGiveTasksForWaitingClients() {
 
 async function start() {
     try {
-        const { connection: conn, channel: ch } = await connectToRabbitMQ();
-        connection = conn;
+        const { channel: ch } = await connectToRabbitMQ();
         channel = ch;
         
         //workerzy

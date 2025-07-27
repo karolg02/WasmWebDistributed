@@ -11,3 +11,5 @@ sudo systemctl start rabbitmq
 sudo systemctl stop rabbitmq
 
 sudo rabbitmqctl purge_queue tasks
+
+emcc trapezoidal.cpp -o trapezoidal.js   -sEXPORTED_FUNCTIONS=_main_function,_getResult,_freeResult,_malloc,_free   -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,setValue,getValue,UTF8ToString   -sMODULARIZE=1   -sEXPORT_NAME="Module"   -sALLOW_MEMORY_GROWTH=1   -sINITIAL_MEMORY=67108864

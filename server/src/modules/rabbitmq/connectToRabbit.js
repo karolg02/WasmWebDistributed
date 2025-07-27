@@ -1,12 +1,12 @@
 const amqp = require("amqplib");
 
 let connection = null;
-let channel = null;
 
 async function connectToRabbitMQ() {
     const amqpHost = process.env.AMQP_HOST || '127.0.0.1';
     const maxRetries = 5;
     let retries = 0;
+    let channel = null;
     
     while (retries < maxRetries) {
         try {

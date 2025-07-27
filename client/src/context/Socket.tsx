@@ -3,11 +3,7 @@ import io, { Socket } from 'socket.io-client';
 
 const getServerHost = () => {
     if (typeof window !== 'undefined') {
-        const hostname = window.location.hostname;
-        if (hostname === 'localhost' || hostname === '127.0.0.1') {
-            return hostname;
-        }
-        return 'server';
+        return window.location.hostname;
     }
     return 'localhost';
 };

@@ -4,43 +4,38 @@ services:
   rabbitmq:
     image: rabbitmq:3
     ports:
-      - "5672:5672"
+      - "0.0.0.0:5672:5672"
+    networks:
+      - app-network
+
+  server:
+    build: ./server
+    ports:
+      - "0.0.0.0:8080:8080"
+    depends_on:
+      - rabbitmq
+    environment:
+      - AMQP_HOST=rabbitmq
     networks:
       - app-network
 
   client:
     build: ./client
     ports:
-      - "3000:3000"
+      - "0.0.0.0:3000:3000"
+    depends_on:
+      - server
     networks:
       - app-network
 
   worker:
     build: ./worker
     ports:
-      - "8000:8000"
-    environment:
-      - SERVER_HOST=server
-    volumes:
-      - shared-temp:/usr/share/nginx/html/temp
+      - "0.0.0.0:8000:8000"
+    depends_on:
+      - server
     networks:
       - app-network
-
-  server:
-      build: ./server
-      ports:
-        - "8080:8080"
-      depends_on:
-        - rabbitmq
-      environment:
-        - AMQP_HOST=rabbitmq
-      volumes:
-        - shared-temp:/app/worker/temp
-      networks:
-        - app-network
-
-volumes:
-  shared-temp:
 
 networks:
   app-network:
