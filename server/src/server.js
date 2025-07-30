@@ -13,6 +13,7 @@ const { sanitizeJsIdentifier } = require("./modules/utils/utils");
 const { deleteClientFiles } = require("./modules/utils/deleteClientFiles");
 const { getClientResult } = require("./modules/socket/client/clientResult");
 const { broadcastWorkerList, broadcastWorkerQueueList } = require("./modules/socket/worker/broadcast");
+const { tasksDevider3000 } = require("./modules/utils/tasksDivider3000");
 
 const app = express();
 app.use(express.json());
@@ -119,63 +120,6 @@ app.post('/upload-wasm', upload.fields([
 
 app.use('/temp', express.static(tempDir));
 
-async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTaskParams) {
-    const benchmarks = selectedWorkerIds.map(id => ({
-        id,
-        benchmarkScore: workers.get(id)?.performance?.benchmarkScore || 0.1
-    }));
-    const totalBenchmarkScore = benchmarks.reduce((sum, worker) => sum + worker.benchmarkScore, 0);
-
-    const taskCountPerWorker = benchmarks.map(worker => ({
-        id: worker.id,
-        count: Math.floor((worker.benchmarkScore / totalBenchmarkScore) * tasks.length),
-        batchSize: Math.max(50, Math.min(1000, Math.round(((workers.get(worker.id)?.performance?.benchmarkScore || 0.1) * 100) / 50) * 50))
-    }));
-    let assigned = taskCountPerWorker.reduce((sum, worker) => sum + worker.count, 0);
-    let remaining = tasks.length - assigned;
-
-    if (remaining > 0) {
-        const workersByScore = [...taskCountPerWorker]
-            .sort((a, b) => (b.benchmarkScore || 0) - (a.benchmarkScore || 0));
-
-        for (let i = 0; remaining > 0; i = (i + 1) % workersByScore.length) {
-            workersByScore[i].count += 1;
-            remaining--;
-        }
-    }
-
-    let taskIndex = 0;
-    const workerTasks = new Map();
-
-    for (const { id, count } of taskCountPerWorker) {
-        if (!workerTasks.has(id)) {
-            workerTasks.set(id, []);
-        }
-
-        const workerTaskList = workerTasks.get(id);
-        for (let j = 0; j < count && taskIndex < tasks.length; j++) {
-            const task = tasks[taskIndex];
-            task.clientId = clientId;
-            task.useCustomFunction = true;
-            task.sanitizedId = originalTaskParams.sanitizedId;
-            workerTaskList.push(task);
-            taskIndex++;
-        }
-    }
-
-    for (const { id, batchSize } of taskCountPerWorker) {
-        const queueName = `tasks.worker_${id}`;
-        const workerTaskList = workerTasks.get(id) || [];
-
-        for (let i = 0; i < workerTaskList.length; i += batchSize) {
-            const batch = workerTaskList.slice(i, i + batchSize);
-            if (batch.length > 0) {
-                channel.sendToQueue(queueName, Buffer.from(JSON.stringify(batch)));
-            }
-        }
-    }
-}
-
 async function tryToGiveTasksForWaitingClients() {
     for (const [clientId, pending] of waitingClients.entries()) {
         const allFree = pending.workerIds.every(id => !workerLocks.has(id));
@@ -202,7 +146,7 @@ async function tryToGiveTasksForWaitingClients() {
             method: pending.taskParams.method,
             totalSamples: pending.taskParams.method === 'custom1D' || pending.taskParams.method === 'custom2D' ? null : pending.taskParams.samples
         });
-        await tasksDevider3000(pending.tasks, clientId, pending.workerIds, pending.taskParams);
+        await tasksDevider3000(pending.tasks, clientId, pending.workerIds, pending.taskParams, workers, channel);
     }
 }
 
@@ -358,7 +302,7 @@ async function start() {
                         totalSamples: null
                     });
 
-                    await tasksDevider3000(tasks, clientId, selected, taskParams);
+                    await tasksDevider3000(tasks, clientId, selected, taskParams, workers, channel);
                     broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
                 } else {
                     waitingClients.set(clientId, {
