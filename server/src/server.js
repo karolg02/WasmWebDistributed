@@ -6,16 +6,15 @@ const cors = require("cors");
 const fs = require('fs');
 const path = require('path');
 
-const { createTasks } = require("./modules/createTasks");
 const { createQueuePerClient } = require("./modules/createQueuePerWorker");
 const { connectToRabbitMQ } = require("./modules/rabbitmq/connectToRabbit");
-const { sanitizeJsIdentifier } = require("./modules/utils/utils");
-const { deleteClientFiles } = require("./modules/utils/deleteClientFiles");
 const { getClientResult } = require("./modules/socket/client/clientResult");
 const { broadcastWorkerList, broadcastWorkerQueueList } = require("./modules/socket/worker/broadcast");
 const { tasksDevider3000 } = require("./modules/utils/tasksDivider3000");
 const { tryToGiveTasksForWaitingClients } = require("./modules/common/tasksForClients");
 const { uploadWasmHandler } = require("./modules/common/uploadWasm");
+const { registerWorkerNamespace } = require("./modules/socket/worker/workerHandler");
+const { registerClientNamespace } = require("./modules/socket/client/clientHandler");
 
 const app = express();
 app.use(express.json());
@@ -75,219 +74,12 @@ async function start() {
         channel = ch;
         
         //workerzy
-        io.of("/worker").on("connection", async (socket) => {
-            console.log("[Worker] Connected", socket.id);
-
-            socket.on("register", async (workerInfo) => {
-                const name = `${workerInfo?.system?.platform || 'Unknown'} (${workerInfo?.performance?.benchmarkScore?.toFixed(2) || '0.00'})`;
-
-                workers.set(socket.id, {
-                    socket,
-                    name,
-                    benchmarkScore: workerInfo?.performance?.benchmarkScore || 0,
-                    specs: {
-                        platform: workerInfo?.system?.platform || 'Unknown',
-                        userAgent: workerInfo?.system?.userAgent || 'Unknown',
-                        language: workerInfo?.system?.language || 'Unknown',
-                        hardwareConcurrency: workerInfo?.system?.hardwareConcurrency || 0,
-                        deviceMemory: workerInfo?.system?.deviceMemory || 'unknown'
-                    },
-                    performance: {
-                        benchmarkScore: workerInfo?.performance?.benchmarkScore || 0,
-                        latency: workerInfo?.performance?.latency || 0
-                    }
-                });
-
-                await createQueuePerClient(channel, socket.id, socket);
-                broadcastWorkerList(io, workers);
-            });
-
-            socket.on("batch_result", async (data) => {
-                const { clientId, results, result, tasksCount, method } = data;
-                const state = clientStates.get(clientId);
-
-                if (!state) return;
-
-                if (state.completed === 0) {
-                    state.start = Date.now();
-                    state.method = method;
-                    state.results = [];
-                }
-
-                if (Array.isArray(results) && results.length > 0) {
-                    state.results.push(...results);
-                } else if (result !== undefined && result !== null) {
-                    state.results.push(result);
-                }
-
-                state.completed += tasksCount;
-
-                const now = Date.now();
-                if (now - state.lastUpdate >= 1000 || state.completed === state.expected) {
-                    const clientSocket = clientSockets.get(clientId);
-                    if (clientSocket) {
-                        clientSocket.emit("task_progress", {
-                            done: state.completed,
-                            elapsedTime: Math.max(0, (now - state.start) / 1000)
-                        });
-                    }
-                    state.lastUpdate = now;
-                }
-
-                if (state.completed === state.expected) {
-                    try {
-                        const rawResult = await getClientResult(clientId, state.results, activeCustomFunctions, tempDir);
-                        const clientSocket = clientSockets.get(clientId);
-
-                        if (clientSocket) {
-                            clientSocket.emit("final_result", {
-                                result: rawResult,
-                                duration: ((now - state.start) / 1000).toFixed(2),
-                                resultsCount: state.results.length
-                            });
-                        }
-                    } catch (error) {
-                        const fallbackSum = state.results.reduce((sum, val) => sum + val, 0);
-                        const clientSocket = clientSockets.get(clientId);
-                        if (clientSocket) {
-                            clientSocket.emit("final_result", {
-                                result: `Błąd getResult! Suma: ${fallbackSum}`,
-                                duration: ((now - state.start) / 1000).toFixed(2),
-                                resultsCount: state.results.length,
-                                error: "getResult failed, using sum instead"
-                            });
-                        }
-                    }
-                    const taskInfo = clientTasks.get(clientId);
-                    if (taskInfo) {
-                        for (const wid of taskInfo.workerIds) {
-                            if (workerLocks.get(wid) === clientId) {
-                                workerLocks.delete(wid);
-                            }
-                        }
-                        clientTasks.delete(clientId);
-                    }
-
-                    clientStates.delete(clientId);
-                    await tryToGiveTasksForWaitingClients(
-                        waitingClients,
-                        workerLocks,
-                        workerQueue,
-                        clientTasks,
-                        clientStates,
-                        workers,
-                        channel,
-                        tasksDevider3000
-                    );
-                    broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
-                }
-            });
-
-            socket.on("ping_resultSocket", () => {
-                socket.emit("pong_resultSocket");
-            });
-
-            socket.on("disconnect", () => {
-                console.log("[Worker] Disconnected", socket.id);
-                const queueName = `tasks.worker_${socket.id}`;
-                channel.deleteQueue(queueName);
-                workers.delete(socket.id);
-                if (workerLocks.has(socket.id)) {
-                    workerLocks.delete(socket.id);
-                }
-                broadcastWorkerList(io, workers);
-            });
-        });
+        registerWorkerNamespace(
+            io, channel, workers, createQueuePerClient, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList);
 
         //klienci
-        io.of("/client").on("connection", (socket) => {
-            console.log("[Client] Connected", socket.id);
-            clientSockets.set(socket.id, socket);
-
-            socket.on("start", async ({ workerIds, taskParams }) => {
-                const clientId = socket.id;
-                const selected = workerIds.filter(id => workers.has(id));
-                const tasks = await createTasks(taskParams);
-                const allAvailable = selected.every(id => !workerLocks.has(id));
-
-                if (allAvailable) {
-                    for (const id of selected) {
-                        workerLocks.set(id, clientId);
-                    }
-
-                    clientTasks.set(clientId, {
-                        socket,
-                        workerIds: selected
-                    });
-
-                    clientStates.set(clientId, {
-                        expected: tasks.length,
-                        completed: 0,
-                        results: [],
-                        start: 0,
-                        lastUpdate: 0,
-                        method: taskParams.method,
-                        totalSamples: null
-                    });
-
-                    await tasksDevider3000(tasks, clientId, selected, taskParams, workers, channel);
-                    broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
-                } else {
-                    waitingClients.set(clientId, {
-                        socket,
-                        workerIds: selected,
-                        tasks,
-                        taskParams
-                    });
-
-                    for (const id of selected) {
-                        if (!workerQueue.has(id)) {
-                            workerQueue.set(id, []);
-                        }
-                        const queue = workerQueue.get(id);
-                        if (!queue.includes(clientId)) {
-                            queue.push(clientId);
-                        }
-                    }
-                    broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
-                }
-            });
-
-            socket.on("request_worker_list", () => {
-                broadcastWorkerList(io, workers);
-                broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
-            });
-
-            socket.on("disconnect", () => {
-                console.log("[Client] Disconnected", socket.id);
-                clientSockets.delete(socket.id);
-
-                const taskInfo = clientTasks.get(socket.id);
-                if (taskInfo) {
-                    for (const wid of taskInfo.workerIds) {
-                        if (workerLocks.get(wid) === socket.id) {
-                            workerLocks.delete(wid);
-                        }
-                    }
-                    clientTasks.delete(socket.id);
-                }
-
-                clientStates.delete(socket.id);
-                waitingClients.delete(socket.id);
-
-                for (const [wid, queue] of workerQueue.entries()) {
-                    workerQueue.set(wid, queue.filter(cid => cid !== socket.id));
-                }
-                broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
-
-                // czyszczenie plikow od klienta
-                if (activeCustomFunctions.has(socket.id)) {
-                    deleteClientFiles(socket.id, tempDir);
-                    activeCustomFunctions.delete(socket.id);
-                    io.of("/worker").emit("unload_custom_wasm", { clientId: socket.id, sanitizedId: sanitizeJsIdentifier(socket.id) });
-                }
-            });
-        });
+        registerClientNamespace(
+            io, channel, workers, createQueuePerClient, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList);
 
         server.listen(8080, "0.0.0.0", () => {
             console.log("[Server] Listening on port 8080");
