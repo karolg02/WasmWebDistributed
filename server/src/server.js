@@ -3,11 +3,16 @@ const http = require("http");
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
-const { createTasks } = require("./modules/createTasks");
-const { createQueuePerClient } = require("./modules/createQueuePerWorker");
 const fs = require('fs');
 const path = require('path');
+
+const { createTasks } = require("./modules/createTasks");
+const { createQueuePerClient } = require("./modules/createQueuePerWorker");
 const { connectToRabbitMQ } = require("./modules/rabbitmq/connectToRabbit");
+const { sanitizeJsIdentifier } = require("./modules/utils/utils");
+const { deleteClientFiles } = require("./modules/utils/deleteClientFiles");
+const { getClientResult } = require("./modules/socket/client/clientResult");
+const { broadcastWorkerList, broadcastWorkerQueueList } = require("./modules/socket/worker/broadcast");
 
 const app = express();
 app.use(express.json());
@@ -32,6 +37,7 @@ const waitingClients = new Map();
 const clientStates = new Map();
 const activeCustomFunctions = new Map();
 
+
 let channel = null;
 
 const tempDir = path.join(__dirname, '../temp');
@@ -39,106 +45,7 @@ if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
 }
 
-function sanitizeJsIdentifier(id) {
-    if (!id || typeof id !== 'string') {
-        return 'unknown_client';
-    }
-    return id.replace(/[^a-zA-Z0-9_]/g, '_');
-}
-
 app.use('/temp', express.static(tempDir));
-
-async function getClientResult(clientId, results) {
-    const customFunction = activeCustomFunctions.get(clientId);
-    if (!customFunction) {
-        const sum = results.reduce((sum, val) => sum + val, 0);
-        return `Suma: ${sum}, Liczba wyników: ${results.length}`;
-    }
-
-    try {
-        const wasmPath = path.join(tempDir, `${customFunction.sanitizedId}.wasm`);
-        const loaderPath = path.join(tempDir, `${customFunction.sanitizedId}.js`);
-
-        if (!fs.existsSync(loaderPath)) {
-            throw new Error(`Client loader not found: ${loaderPath}`);
-        }
-
-        if (!fs.existsSync(wasmPath)) {
-            throw new Error(`Client WASM not found: ${wasmPath}`);
-        }
-
-        delete require.cache[require.resolve(loaderPath)];
-        const ModuleFactory = require(loaderPath);
-
-        const module = await ModuleFactory({
-            locateFile: (filename) => {
-                if (filename.endsWith('.wasm')) {
-                    return wasmPath;
-                }
-                return filename;
-            }
-        });
-
-        const resultsPtr = module._malloc(results.length * 8);
-        if (!resultsPtr) {
-            throw new Error('[Server] Failed to allocate memory for getting results in WASM');
-        }
-
-        try {
-            for (let i = 0; i < results.length; i++) {
-                const targetPtr = resultsPtr + i * 8;
-                module.setValue(targetPtr, results[i], 'double');
-            }
-
-            let jsonResultPtr;
-            if (typeof module._getResult === 'function') {
-                jsonResultPtr = module._getResult(resultsPtr, results.length);
-            } else if (typeof module.getResult === 'function') {
-                jsonResultPtr = module.getResult(resultsPtr, results.length);
-            } else {
-                jsonResultPtr = module.ccall('_getResult', 'number', ['number', 'number'], [resultsPtr, results.length]);
-            }
-
-            if (!jsonResultPtr) {
-                throw new Error('getResult returned null pointer');
-            }
-
-            let resultString;
-            if (typeof module.UTF8ToString === 'function') {
-                resultString = module.UTF8ToString(jsonResultPtr);
-            } else if (typeof module.AsciiToString === 'function') {
-                resultString = module.AsciiToString(jsonResultPtr);
-            } else {
-                let str = '';
-                let i = 0;
-                while (true) {
-                    const charCode = module.getValue(jsonResultPtr + i, 'i8');
-                    if (charCode === 0) break;
-                    str += String.fromCharCode(charCode);
-                    i++;
-                }
-                resultString = str;
-            }
-
-            module._free(resultsPtr);
-            if (typeof module._freeResult === 'function') {
-                module._freeResult(jsonResultPtr);
-            } else {
-                module._free(jsonResultPtr);
-            }
-
-            return resultString;
-
-        } catch (execError) {
-            module._free(resultsPtr);
-            throw execError;
-        }
-
-    } catch (error) {
-        const fallbackSum = results.reduce((sum, val) => sum + val, 0);
-        return `Błąd! Suma fallback: ${fallbackSum}, Liczba: ${results.length}`;
-    }
-}
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -210,57 +117,7 @@ app.post('/upload-wasm', upload.fields([
     }
 });
 
-//funkcja do czyszczenia plikow klienta
-function deleteClientFiles(clientId, tempDir) {
-    const sanitizedId = sanitizeJsIdentifier(clientId);
-    const wasmFile = path.join(tempDir, `${sanitizedId}.wasm`);
-    const loaderFile = path.join(tempDir, `${sanitizedId}.js`);
-
-    if (fs.existsSync(wasmFile) && fs.existsSync(loaderFile)) {
-        fs.unlinkSync(wasmFile);
-        fs.unlinkSync(loaderFile);
-    }
-}
-
 app.use('/temp', express.static(tempDir));
-
-async function broadcastWorkerList() {
-    const list = Array.from(workers.entries()).map(([id, worker]) => ({
-        id,
-        name: worker.name,
-        specs: {
-            platform: worker.specs.platform,
-            userAgent: worker.specs.userAgent,
-            language: worker.specs.language,
-            hardwareConcurrency: worker.specs.hardwareConcurrency,
-            deviceMemory: worker.specs.deviceMemory
-        },
-        performance: {
-            benchmarkScore: worker.performance.benchmarkScore,
-            latency: worker.performance.latency
-        }
-    }));
-    io.of("/client").emit("worker_update", list);
-}
-
-async function broadcastWorkerQueueList() {
-    const queueStatus = {};
-    for (const [workerId] of workers.entries()) {
-        const currentClient = workerLocks.get(workerId);
-        const queue = workerQueue.get(workerId) || [];
-        const isCalculating = currentClient && clientTasks.has(currentClient);
-
-        queueStatus[workerId] = {
-            workerId,
-            queueLength: queue.length,
-            currentClient: currentClient || null,
-            isAvailable: !currentClient,
-            isCalculating: isCalculating || false
-        };
-    }
-
-    io.of("/client").emit("queue_status", queueStatus);
-}
 
 async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTaskParams) {
     const benchmarks = selectedWorkerIds.map(id => ({
@@ -379,7 +236,7 @@ async function start() {
                 });
 
                 await createQueuePerClient(channel, socket.id, socket);
-                broadcastWorkerList();
+                broadcastWorkerList(io, workers);
             });
 
             socket.on("batch_result", async (data) => {
@@ -416,7 +273,7 @@ async function start() {
 
                 if (state.completed === state.expected) {
                     try {
-                        const rawResult = await getClientResult(clientId, state.results);
+                        const rawResult = await getClientResult(clientId, state.results, activeCustomFunctions, tempDir);
                         const clientSocket = clientSockets.get(clientId);
 
                         if (clientSocket) {
@@ -450,7 +307,7 @@ async function start() {
 
                     clientStates.delete(clientId);
                     tryToGiveTasksForWaitingClients();
-                    broadcastWorkerQueueList();
+                    broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
                 }
             });
 
@@ -466,7 +323,7 @@ async function start() {
                 if (workerLocks.has(socket.id)) {
                     workerLocks.delete(socket.id);
                 }
-                broadcastWorkerList();
+                broadcastWorkerList(io, workers);
             });
         });
 
@@ -502,7 +359,7 @@ async function start() {
                     });
 
                     await tasksDevider3000(tasks, clientId, selected, taskParams);
-                    broadcastWorkerQueueList();
+                    broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
                 } else {
                     waitingClients.set(clientId, {
                         socket,
@@ -520,13 +377,13 @@ async function start() {
                             queue.push(clientId);
                         }
                     }
-                    broadcastWorkerQueueList();
+                    broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
                 }
             });
 
             socket.on("request_worker_list", () => {
-                broadcastWorkerList();
-                broadcastWorkerQueueList();
+                broadcastWorkerList(io, workers);
+                broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
             });
 
             socket.on("disconnect", () => {
@@ -549,7 +406,7 @@ async function start() {
                 for (const [wid, queue] of workerQueue.entries()) {
                     workerQueue.set(wid, queue.filter(cid => cid !== socket.id));
                 }
-                broadcastWorkerQueueList();
+                broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
 
                 // czyszczenie plikow od klienta
                 if (activeCustomFunctions.has(socket.id)) {
