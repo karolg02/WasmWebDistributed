@@ -14,6 +14,7 @@ const { deleteClientFiles } = require("./modules/utils/deleteClientFiles");
 const { getClientResult } = require("./modules/socket/client/clientResult");
 const { broadcastWorkerList, broadcastWorkerQueueList } = require("./modules/socket/worker/broadcast");
 const { tasksDevider3000 } = require("./modules/utils/tasksDivider3000");
+const { tryToGiveTasksForWaitingClients } = require("./modules/common/tasksForClients");
 
 const app = express();
 app.use(express.json());
@@ -120,36 +121,6 @@ app.post('/upload-wasm', upload.fields([
 
 app.use('/temp', express.static(tempDir));
 
-async function tryToGiveTasksForWaitingClients() {
-    for (const [clientId, pending] of waitingClients.entries()) {
-        const allFree = pending.workerIds.every(id => !workerLocks.has(id));
-        if (!allFree) continue;
-
-        for (const id of pending.workerIds) {
-            workerLocks.set(id, clientId);
-            const q = workerQueue.get(id);
-            if (q && q[0] === clientId) q.shift();
-        }
-
-        waitingClients.delete(clientId);
-
-        clientTasks.set(clientId, {
-            socket: pending.socket,
-            workerIds: pending.workerIds
-        });
-        clientStates.set(clientId, {
-            expected: pending.tasks.length,
-            completed: 0,
-            results: [],
-            start: 0,
-            lastUpdate: 0,
-            method: pending.taskParams.method,
-            totalSamples: pending.taskParams.method === 'custom1D' || pending.taskParams.method === 'custom2D' ? null : pending.taskParams.samples
-        });
-        await tasksDevider3000(pending.tasks, clientId, pending.workerIds, pending.taskParams, workers, channel);
-    }
-}
-
 async function start() {
     try {
         const { channel: ch } = await connectToRabbitMQ();
@@ -250,7 +221,16 @@ async function start() {
                     }
 
                     clientStates.delete(clientId);
-                    tryToGiveTasksForWaitingClients();
+                    await tryToGiveTasksForWaitingClients(
+                        waitingClients,
+                        workerLocks,
+                        workerQueue,
+                        clientTasks,
+                        clientStates,
+                        workers,
+                        channel,
+                        tasksDevider3000
+                    );
                     broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
                 }
             });
