@@ -15,6 +15,7 @@ const { getClientResult } = require("./modules/socket/client/clientResult");
 const { broadcastWorkerList, broadcastWorkerQueueList } = require("./modules/socket/worker/broadcast");
 const { tasksDevider3000 } = require("./modules/utils/tasksDivider3000");
 const { tryToGiveTasksForWaitingClients } = require("./modules/common/tasksForClients");
+const { uploadWasmHandler } = require("./modules/common/uploadWasm");
 
 const app = express();
 app.use(express.json());
@@ -23,7 +24,6 @@ app.use(cors({
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "Authorization"]
 }));
-
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -65,59 +65,7 @@ const upload = multer({ storage: storage });
 app.post('/upload-wasm', upload.fields([
     { name: 'wasmFile', maxCount: 1 },
     { name: 'loaderFile', maxCount: 1 }
-]), (req, res) => {
-    try {
-        const { clientId, method } = req.body;
-
-        if (!clientId) {
-            return res.json({
-                success: false,
-                error: "Brak clientId w żądaniu"
-            });
-        }
-
-        const sanitizedId = sanitizeJsIdentifier(clientId);
-
-        const wasmTempFile = req.files['wasmFile'][0];
-        const loaderTempFile = req.files['loaderFile'][0];
-
-        const wasmPath = path.join(tempDir, `${sanitizedId}.wasm`);
-        const loaderPath = path.join(tempDir, `${sanitizedId}.js`);
-
-        try {
-            fs.renameSync(wasmTempFile.path, wasmPath);
-            fs.renameSync(loaderTempFile.path, loaderPath);
-        } catch (renameError) {
-            return res.json({
-                success: false,
-                error: "Błąd podczas zapisywania plików"
-            });
-        }
-
-        activeCustomFunctions.set(clientId, {
-            active: true,
-            sanitizedId: sanitizedId
-        });
-
-        io.of("/worker").emit("custom_wasm_available", {
-            clientId,
-            sanitizedId,
-            timestamp: Date.now()
-        });
-
-        res.json({
-            success: true,
-            message: "Pliki przesłane pomyślnie",
-            sanitizedId: sanitizedId
-        });
-
-    } catch (error) {
-        res.json({
-            success: false,
-            error: "Błąd serwera podczas przetwarzania plików"
-        });
-    }
-});
+]), uploadWasmHandler(activeCustomFunctions, io, tempDir));
 
 app.use('/temp', express.static(tempDir));
 
