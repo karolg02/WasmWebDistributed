@@ -1,4 +1,4 @@
-async function createQueuePerClient(channel, workerId, socket) {
+async function createQueuePerWorker(channel, workerId, socket) {
     const queueName = `tasks.worker_${workerId}`;
     await channel.assertQueue(queueName);
 
@@ -10,4 +10,4 @@ async function createQueuePerClient(channel, workerId, socket) {
         }
     });
 }
-exports.createQueuePerClient = createQueuePerClient;
+exports.createQueuePerWorker = createQueuePerWorker;

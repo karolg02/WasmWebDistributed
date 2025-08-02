@@ -1,12 +1,9 @@
 const { Server } = require("socket.io");
+
 const http = require("http");
-const express = require("express");
-const multer = require("multer");
-const cors = require("cors");
-const fs = require('fs');
 const path = require('path');
 
-const { createQueuePerClient } = require("./modules/createQueuePerWorker");
+const { createQueuePerWorker } = require("./modules/createQueuePerWorker");
 const { connectToRabbitMQ } = require("./modules/rabbitmq/connectToRabbit");
 const { getClientResult } = require("./modules/socket/client/clientResult");
 const { broadcastWorkerList, broadcastWorkerQueueList } = require("./modules/socket/worker/broadcast");
@@ -15,14 +12,11 @@ const { tryToGiveTasksForWaitingClients } = require("./modules/common/tasksForCl
 const { uploadWasmHandler } = require("./modules/common/uploadWasm");
 const { registerWorkerNamespace } = require("./modules/socket/worker/workerHandler");
 const { registerClientNamespace } = require("./modules/socket/client/clientHandler");
+const { getMulterUpload, ensureTempDir } = require("./modules/common/config");
+const { configureExpress, registerRoutes } = require("./modules/common/expressConfig");
 
-const app = express();
-app.use(express.json());
-app.use(cors({
-    origin: "*",
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-}));
+const app = require("express")();
+configureExpress(app);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -39,35 +33,14 @@ const clientStates = new Map();
 const activeCustomFunctions = new Map();
 
 
-let channel = null;
-
 const tempDir = path.join(__dirname, '../temp');
-if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-}
+ensureTempDir(tempDir);
 
-app.use('/temp', express.static(tempDir));
+const upload = getMulterUpload(tempDir);
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, tempDir);
-    },
-    filename: (req, file, cb) => {
-        const timestamp = Date.now();
-        const ext = path.extname(file.originalname);
-        cb(null, `temp_${timestamp}_${file.fieldname}${ext}`);
-    }
-});
+registerRoutes(app, upload, uploadWasmHandler(activeCustomFunctions, io, tempDir), tempDir);
 
-const upload = multer({ storage: storage });
-
-app.post('/upload-wasm', upload.fields([
-    { name: 'wasmFile', maxCount: 1 },
-    { name: 'loaderFile', maxCount: 1 }
-]), uploadWasmHandler(activeCustomFunctions, io, tempDir));
-
-app.use('/temp', express.static(tempDir));
-
+let channel = null;
 async function start() {
     try {
         const { channel: ch } = await connectToRabbitMQ();
@@ -75,11 +48,11 @@ async function start() {
         
         //workerzy
         registerWorkerNamespace(
-            io, channel, workers, createQueuePerClient, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList);
+            io, channel, workers, createQueuePerWorker, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList);
 
         //klienci
         registerClientNamespace(
-            io, channel, workers, createQueuePerClient, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList);
+            io, channel, workers, broadcastWorkerList, clientStates, clientSockets, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList);
 
         server.listen(8080, "0.0.0.0", () => {
             console.log("[Server] Listening on port 8080");

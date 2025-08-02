@@ -2,7 +2,7 @@ const { createTasks } = require("../../createTasks");
 const { sanitizeJsIdentifier } = require("../../utils/utils");
 const { deleteClientFiles } = require("../../utils/deleteClientFiles");
 
-function registerClientNamespace(io, channel, workers, createQueuePerClient, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList) {
+function registerClientNamespace(io, channel, workers, broadcastWorkerList, clientStates, clientSockets, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList) {
     io.of("/client").on("connection", (socket) => {
             console.log("[Client] Connected", socket.id);
             clientSockets.set(socket.id, socket);
