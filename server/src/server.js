@@ -3,7 +3,7 @@ const { Server } = require("socket.io");
 const http = require("http");
 const path = require('path');
 
-const { createQueuePerWorker } = require("./modules/createQueuePerWorker");
+const { createQueuePerWorker } = require("./modules/socket/worker/createQueuePerWorker");
 const { connectToRabbitMQ } = require("./modules/rabbitmq/connectToRabbit");
 const { getClientResult } = require("./modules/socket/client/clientResult");
 const { broadcastWorkerList, broadcastWorkerQueueList } = require("./modules/socket/worker/broadcast");

@@ -1,4 +1,4 @@
-function registerWorkerNamespace(io, channel, workers, createQueuePerClient, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList) {
+function registerWorkerNamespace(io, channel, workers, createQueuePerWorker, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList) {
     io.of("/worker").on("connection", async (socket) => {
             console.log("[Worker] Connected", socket.id);
 
@@ -22,7 +22,7 @@ function registerWorkerNamespace(io, channel, workers, createQueuePerClient, bro
                     }
                 });
 
-                await createQueuePerClient(channel, socket.id, socket);
+                await createQueuePerWorker(channel, socket.id, socket);
                 broadcastWorkerList(io, workers);
             });
 
