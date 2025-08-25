@@ -102,7 +102,7 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
                 </Badge>
             </Group>
 
-            <Stack gap="sm">
+            <Stack gap="xs">
                 <Group justify="space-between">
                     <Group gap="xs">
                         <IconCpu size={16} color="#7950f2" />
@@ -119,6 +119,15 @@ export const WorkerCard: React.FC<WorkerCardProps> = ({
                     </Group>
                     <Text size="xs" fw={600} c="white">
                         {worker.performance.benchmarkScore.toFixed(2)} ops/sec
+                    </Text>
+                </Group>
+
+                <Group justify="space-between">
+                    <Group gap="xs">
+                        <Text size="xs" c="rgba(255, 255, 255, 0.8)">Opóźnienie</Text>
+                    </Group>
+                    <Text size="xs" fw={600} c="white">
+                        {worker.performance.latency.toFixed(2)} ms
                     </Text>
                 </Group>
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Container, Paper, Title, Text, SimpleGrid, Group, Badge, Alert, Box } from "@mantine/core";
+import { showNotification } from "@mantine/notifications";
 import { useSocket } from "../hooks/useSocket";
 import { AllTaskParams, CustomParams1D, CustomParams2D } from "../types/types";
 import { ResultsPanel } from "../components/ResultsPanel";
@@ -43,6 +44,7 @@ export function TasksPanel() {
 
         if (selectedWorkerIds.length === 0) {
             setError("Wybierz co najmniej jednego workera!");
+            showNotification({ color: 'red', title: 'Brak workerów', message: 'Wybierz co najmniej jednego workera przed uruchomieniem zadania.' });
             return;
         }
 
@@ -56,11 +58,13 @@ export function TasksPanel() {
 
         if (!selectedWasmFile) {
             setError("Musisz przesłać plik WASM");
+            showNotification({ color: 'red', title: 'Brak pliku WASM', message: 'Dołącz plik .wasm przed wysłaniem zadania.' });
             return;
         }
 
         if (!selectedLoaderFile) {
             setError("Musisz przesłać plik loader.js");
+            showNotification({ color: 'red', title: 'Brak loader.js', message: 'Dołącz plik loader.js przed wysłaniem zadania.' });
             return;
         }
 
@@ -71,6 +75,7 @@ export function TasksPanel() {
             uploadFormData.append('clientId', socket?.id || '');
             uploadFormData.append('method', currentMethod);
 
+            showNotification({ color: 'blue', title: 'Wysyłanie plików', message: 'Przesyłanie plików na serwer...' });
             const uploadResponse = await fetch(`http://${window.location.hostname}:8080/upload-wasm`, {
                 method: 'POST',
                 body: uploadFormData
@@ -80,9 +85,11 @@ export function TasksPanel() {
 
             if (!uploadResult.success) {
                 setError(uploadResult.error || "Błąd podczas przesyłania plików");
+                showNotification({ color: 'red', title: 'Błąd uploadu', message: uploadResult.error || 'Nie udało się przesłać plików.' });
                 return;
             }
 
+            showNotification({ color: 'green', title: 'Upload zakończony', message: 'Pliki zostały przesłane.' });
             const taskParamsWithId = {
                 ...taskParams,
                 id: uploadResult.sanitizedId
@@ -92,9 +99,13 @@ export function TasksPanel() {
 
             if (taskResult && !taskResult.success) {
                 setError("Wystąpił błąd podczas uruchamiania zadania");
+                showNotification({ color: 'red', title: 'Błąd uruchomienia', message: taskResult.error || 'Nie udało się uruchomić zadania.' });
+            } else {
+                showNotification({ color: 'green', title: 'Zadanie uruchomione', message: 'Zadanie zostało wysłane do wybranych workerów.' });
             }
         } catch (error) {
             setError("Błąd podczas komunikacji z serwerem");
+            showNotification({ color: 'red', title: 'Błąd sieci', message: 'Nie można skomunikować się z serwerem.' });
             console.error('Upload error:', error);
         }
     };
@@ -128,22 +139,6 @@ export function TasksPanel() {
                 >
                     Panel konfiguracyjny {currentMethod === 'custom2D' ? '2D' : '1D'}
                 </Title>
-                {error && (
-                    <Alert
-                        icon={<IconAlertTriangle size={16} />}
-                        title="Błąd"
-                        color="red"
-                        mb="xl"
-                        withCloseButton
-                        onClose={() => setError(null)}
-                        style={{
-                            background: 'rgba(255, 107, 107, 0.1)',
-                            border: '1px solid rgba(255, 107, 107, 0.3)',
-                        }}
-                    >
-                        {error}
-                    </Alert>
-                )}
 
                 {currentMethod === 'custom1D' ? (
                     <CustomForm
@@ -197,7 +192,7 @@ export function TasksPanel() {
                             </Text>
                         </Paper>
                     ) : (
-                        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg" mb="xl">
+                        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg" mb="xl">
                             {workers.map(worker => {
                                 const isSelected = selectedWorkerIds.includes(worker.id);
                                 const workerQueueStatus = queueStatus ? queueStatus[worker.id] : null;
