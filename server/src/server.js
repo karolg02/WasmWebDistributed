@@ -1,3 +1,5 @@
+const express = require('express');
+const router = express.Router();
 const { Server } = require("socket.io");
 
 const http = require("http");
@@ -14,8 +16,10 @@ const { registerWorkerNamespace } = require("./modules/socket/worker/workerHandl
 const { registerClientNamespace } = require("./modules/socket/client/clientHandler");
 const { getMulterUpload, ensureTempDir } = require("./modules/common/config");
 const { configureExpress, registerRoutes } = require("./modules/common/expressConfig");
+const db = require('./modules/common/db');
+const auth = require('./modules/socket/auth');
 
-const app = require("express")();
+const app = express();
 configureExpress(app);
 
 const server = http.createServer(app);
@@ -31,7 +35,6 @@ const workerQueue = new Map();
 const waitingClients = new Map();
 const clientStates = new Map();
 const activeCustomFunctions = new Map();
-
 
 const tempDir = path.join(__dirname, '../temp');
 ensureTempDir(tempDir);
@@ -63,3 +66,24 @@ async function start() {
 }
 
 start();
+
+app.post('/api/register', async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+    const token = await auth.register(username, email, password);
+    res.json({ token });
+  } catch (err) {
+    if (err.message === 'USER_EXISTS') return res.status(409).json({ error: 'User exists' });
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const token = await auth.login(username, password);
+    res.json({ token });
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid credentials' });
+  }
+});

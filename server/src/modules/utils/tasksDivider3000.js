@@ -18,8 +18,26 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
             .sort((a, b) => (b.benchmarkScore || 0) - (a.benchmarkScore || 0));
 
         for (let i = 0; remaining > 0; i = (i + 1) % workersByScore.length) {
-            workersByScore[i].count += 1;
-            remaining--;
+            const worker = workersByScore[i];
+            if (worker.id === selectedWorkerIds[0]) {
+                for (let j = tasks.length - 1; j >= 0 && remaining > 0; j--) {
+                    const task = tasks[j];
+                    task.clientId = clientId;
+                    task.useCustomFunction = true;
+                    task.sanitizedId = originalTaskParams.id;
+                    workerTasks.get(worker.id).push(task);
+                    remaining--;
+                }
+            } else {
+                for (let j = 0; j < worker.count && taskIndex < tasks.length; j++) {
+                    const task = tasks[taskIndex];
+                    task.clientId = clientId;
+                    task.useCustomFunction = true;
+                    task.sanitizedId = originalTaskParams.id;
+                    workerTasks.get(worker.id).push(task);
+                    taskIndex++;
+                }
+            }
         }
     }
 
@@ -36,7 +54,7 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
             const task = tasks[taskIndex];
             task.clientId = clientId;
             task.useCustomFunction = true;
-            task.sanitizedId = originalTaskParams.sanitizedId;
+            task.sanitizedId = originalTaskParams.id;
             workerTaskList.push(task);
             taskIndex++;
         }

@@ -1,11 +1,40 @@
 const { createTasks } = require("../../createTasks");
-const { sanitizeJsIdentifier } = require("../../utils/utils");
+const { sanitizeJsIdentifier, verifyToken } = require("../../utils/utils");
 const { deleteClientFiles } = require("../../utils/deleteClientFiles");
 
 function registerClientNamespace(io, channel, workers, broadcastWorkerList, clientStates, clientSockets, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList) {
     io.of("/client").on("connection", (socket) => {
-            console.log("[Client] Connected", socket.id);
+            const token = socket.handshake?.auth?.token || socket.handshake?.query?.token;
+            if (!token) {
+                socket.emit("unauthorized", { reason: "no_token" });
+                console.log("[Client] No token provided - disconnecting", socket.id);
+                return socket.disconnect(true);
+            }
+            const decoded = verifyToken(token);
+            if (!decoded) {
+                socket.emit(
+                    "unauthorized",
+                    { reason: "invalid_token" }
+                    );
+                console.log("[Client] Invalid token - disconnecting", socket.id);
+                return socket.disconnect(true);
+            }
+
+            socket.user = decoded;
+
+            console.log("[Client] Connected", socket.id, "user:", decoded.username || decoded.id);
             clientSockets.set(socket.id, socket);
+
+            try {
+                const initialList = Array.from(workers.entries()).map(([id, info]) => ({
+                    id,
+                    status: info.status || 'idle',
+                    metadata: info.metadata || {}
+                }));
+                socket.emit('worker_list', initialList);
+            } catch (err) {
+                console.error('[Client] error sending initial worker_list', err);
+            }
 
             socket.on("start", async ({ workerIds, taskParams }) => {
                 const clientId = socket.id;
@@ -83,7 +112,6 @@ function registerClientNamespace(io, channel, workers, broadcastWorkerList, clie
                 }
                 broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
 
-                // czyszczenie plikow od klienta
                 if (activeCustomFunctions.has(socket.id)) {
                     deleteClientFiles(socket.id, tempDir);
                     activeCustomFunctions.delete(socket.id);
