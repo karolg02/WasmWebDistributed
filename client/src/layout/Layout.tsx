@@ -8,19 +8,28 @@ import {
     Menu,
     ActionIcon
 } from "@mantine/core";
+import { showNotification } from "@mantine/notifications";
 import {
     IconHome,
     IconDoorExit,
     IconUser,
     IconCpu,
     IconQuestionMark,
-    IconChevronDown
+    IconChevronDown,
+    IconLogout
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 
 export const Layout = () => {
     const navigate = useNavigate();
     const location = useLocation();
+
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        window.dispatchEvent(new Event('auth'));
+        showNotification({ title: 'Wylogowano', message: 'Zostałeś wylogowany', color: 'green' });
+        navigate('/login', { replace: true });
+    };
 
     return (
         <AppShell
@@ -65,10 +74,9 @@ export const Layout = () => {
                         </Text>
                     </Group>
 
-                    {/* Przyciski nawigacji po prawej */}
                     <Group gap="sm">
                         <UnstyledButton
-                            onClick={() => navigate('/')}
+                            onClick={() => navigate('/home')}
                             style={{
                                 padding: '8px 16px',
                                 borderRadius: '20px',
@@ -116,9 +124,7 @@ export const Layout = () => {
                             }}
                         >
                             <Group gap="xs">
-                                <Avatar size={14} radius="xl"
-
-                                >
+                                <Avatar size={14} radius="xl">
                                     <IconUser size={16} />
                                 </Avatar>
                                 <Text size="sm" fw={500} c={location.pathname === '/clientacc' ? '#7950f2' : 'white'}>
@@ -151,6 +157,29 @@ export const Layout = () => {
                                 <IconQuestionMark size={16} color={location.pathname === '/help' ? '#7950f2' : 'white'} />
                                 <Text size="sm" fw={500} c={location.pathname === '/help' ? '#7950f2' : 'white'}>
                                     Pomoc
+                                </Text>
+                            </Group>
+                        </UnstyledButton>
+
+                        <UnstyledButton
+                            onClick={handleLogout}
+                            style={{
+                                padding: '8px 16px',
+                                borderRadius: '20px',
+                                background: location.pathname === '/login' ?
+                                    'linear-gradient(45deg, rgba(121, 80, 242, 0.3), rgba(151, 117, 250, 0.3))' :
+                                    'rgba(255, 255, 255, 0.1)',
+                                backdropFilter: 'blur(10px)',
+                                border: location.pathname === '/login' ?
+                                    '1px solid rgba(121, 80, 242, 0.5)' :
+                                    '1px solid rgba(255, 255, 255, 0.2)',
+                                transition: 'all 0.3s ease'
+                            }}
+                        >
+                            <Group gap="xs">
+                                <IconLogout size={16} color={location.pathname === '/login' ? '#7950f2' : 'white'} />
+                                <Text size="sm" fw={500} c={location.pathname === '/login' ? '#7950f2' : 'white'}>
+                                    Wyloguj
                                 </Text>
                             </Group>
                         </UnstyledButton>

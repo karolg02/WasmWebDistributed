@@ -1,13 +1,13 @@
 export interface CustomParams1D {
     method: 'custom1D';
     params: number[];
-    sanitizedId?: string;
+    id: string;
 }
 
 export interface CustomParams2D {
     method: 'custom2D';
     params: number[];
-    sanitizedId?: string;
+    id: string;
 }
 
 export type AllTaskParams = CustomParams1D | CustomParams2D;

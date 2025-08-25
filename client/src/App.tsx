@@ -4,6 +4,7 @@ import { createTheme, MantineProvider } from "@mantine/core";
 import { BrowserRouter } from "react-router-dom";
 import { Routing } from "./features/Routing";
 import { SocketProvider } from "./context/Socket";
+import { Notifications } from "@mantine/notifications";
 
 const theme = createTheme({
   primaryColor: 'dark',
@@ -97,6 +98,7 @@ function App() {
               }
             `}</style>
             <Routing />
+            <Notifications style={{ position: 'fixed', bottom: 0, right: 0 }} />
           </div>
         </BrowserRouter>
       </SocketProvider>

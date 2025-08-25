@@ -22,11 +22,13 @@ export function TasksPanel() {
     const [customParams1D, setCustomParams1D] = useState<CustomParams1D>({
         method: 'custom1D',
         params: [0, 1, 10000],
+        id: ''
     });
 
     const [customParams2D, setCustomParams2D] = useState<CustomParams2D>({
         method: 'custom2D',
         params: [0, 1, 0, 1, 10000],
+        id: ''
     });
 
     useEffect(() => {
@@ -83,7 +85,7 @@ export function TasksPanel() {
 
             const taskParamsWithId = {
                 ...taskParams,
-                sanitizedId: uploadResult.sanitizedId
+                id: uploadResult.sanitizedId
             };
 
             const taskResult = await startTask(taskParamsWithId as AllTaskParams, selectedWorkerIds);

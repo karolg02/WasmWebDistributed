@@ -2,9 +2,13 @@ import { useEffect, useState } from "react";
 import { useSocketContext } from "../../context/Socket";
 import { Worker } from "../types/Worker";
 import { Progress, QueueStatus, AllTaskParams } from "../types/types";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export const useSocket = () => {
     const socket = useSocketContext();
+    const navigate = useNavigate();
+    const location = useLocation();
+
     const [workers, setWorkers] = useState<Worker[]>([]);
     const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
     const [progress, setProgress] = useState<Progress>({ done: 0, elapsedTime: 0 });
@@ -16,25 +20,39 @@ export const useSocket = () => {
     const [queueStatus, setQueueStatus] = useState<QueueStatus>({});
 
     useEffect(() => {
-        socket.on("worker_update", setWorkers);
-        socket.on("task_progress", (data: Progress) => {
+        const token = localStorage.getItem('token');
+        const authPaths = ['/login', '/register'];
+        if (!token && !authPaths.includes(location.pathname)) {
+            navigate('/login', { replace: true });
+            return;
+        }
+
+        if (!socket) return;
+
+        const onWorkerUpdate = (data: Worker[]) => setWorkers(Array.isArray(data) ? data : []);
+        const onTaskProgress = (data: Progress) => {
             setProgress(data);
             setIsCalculating(true);
-        });
-        socket.on("final_result", (data: { result: number; duration: number }) => {
+        };
+        const onFinalResult = (data: { result: number; duration: number }) => {
             setResult(data.result);
             setDuration(data.duration);
             setIsCalculating(false);
-        });
-        socket.on("queue_status", setQueueStatus);
+        };
+        const onQueueStatus = (data: QueueStatus) => setQueueStatus(data);
+
+        socket.on("worker_update", onWorkerUpdate);
+        socket.on("task_progress", onTaskProgress);
+        socket.on("final_result", onFinalResult);
+        socket.on("queue_status", onQueueStatus);
 
         return () => {
-            socket.off("worker_update");
-            socket.off("task_progress");
-            socket.off("final_result");
-            socket.off("queue_status");
+            socket.off("worker_update", onWorkerUpdate);
+            socket.off("task_progress", onTaskProgress);
+            socket.off("final_result", onFinalResult);
+            socket.off("queue_status", onQueueStatus);
         };
-    }, [socket]);
+    }, [socket, location.pathname, navigate]);
 
     const startTask = async (taskParams: AllTaskParams, workerIds: string[]) => {
         setIsCalculating(true);
@@ -43,6 +61,10 @@ export const useSocket = () => {
         setStartTime(Date.now());
         setTasksPerSecond(null);
         setProgress({ done: 0, elapsedTime: 0 });
+
+        if (!socket) {
+            return { success: false, error: 'no_socket' };
+        }
 
         socket.emit("start", { workerIds, taskParams });
         return { success: true };
@@ -63,3 +85,5 @@ export const useSocket = () => {
         startTask
     };
 };
+
+export { useSocketContext };
