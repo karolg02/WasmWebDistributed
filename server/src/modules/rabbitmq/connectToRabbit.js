@@ -12,6 +12,7 @@ async function connectToRabbitMQ() {
         try {
             connection = await amqp.connect(`amqp://${amqpHost}:5672`);
             channel = await connection.createChannel();
+            
             return { connection, channel };
         } catch (error) {
             console.log(`[Server] Nie udało się połączyć z RabbitMQ: ${error.message}`);

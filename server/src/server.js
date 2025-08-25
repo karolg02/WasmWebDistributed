@@ -51,11 +51,43 @@ async function start() {
         
         //workerzy
         registerWorkerNamespace(
-            io, channel, workers, createQueuePerWorker, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList);
+            io,
+            channel,
+            workers,
+            createQueuePerWorker,
+            broadcastWorkerList,
+            clientStates,
+            clientSockets,
+            getClientResult,
+            activeCustomFunctions,
+            tempDir,
+            clientTasks,
+            workerLocks,
+            tryToGiveTasksForWaitingClients,
+            waitingClients,
+            workerQueue,
+            tasksDevider3000,
+            broadcastWorkerQueueList
+        );
 
         //klienci
         registerClientNamespace(
-            io, channel, workers, broadcastWorkerList, clientStates, clientSockets, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList);
+            io,
+            channel,
+            workers,
+            broadcastWorkerList,
+            clientStates,
+            clientSockets,
+            activeCustomFunctions,
+            tempDir,
+            clientTasks,
+            workerLocks,
+            tryToGiveTasksForWaitingClients,
+            waitingClients,
+            workerQueue,
+            tasksDevider3000,
+            broadcastWorkerQueueList
+        );
 
         server.listen(8080, "0.0.0.0", () => {
             console.log("[Server] Listening on port 8080");
@@ -69,8 +101,18 @@ start();
 
 app.post('/api/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-    const token = await auth.register(username, email, password);
+    const { 
+      username,
+      email,
+      password
+    } = req.body;
+
+    const token = await auth.register(
+      username,
+      email,
+      password
+    );
+
     res.json({ token });
   } catch (err) {
     if (err.message === 'USER_EXISTS') return res.status(409).json({ error: 'User exists' });
@@ -80,7 +122,11 @@ app.post('/api/register', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const {
+      username,
+      password
+    } = req.body;
+    
     const token = await auth.login(username, password);
     res.json({ token });
   } catch (err) {

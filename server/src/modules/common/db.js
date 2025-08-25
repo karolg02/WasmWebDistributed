@@ -16,6 +16,7 @@ db.serialize(() => {
 
 function createUser(username, email, hashedPassword) {
   const sql = `INSERT INTO users (username, email, password) VALUES (?, ?, ?);`;
+
   return new Promise((resolve, reject) => {
     db.run(sql, [username, email, hashedPassword], function(err) {
       if (err) return reject(err);
@@ -26,6 +27,7 @@ function createUser(username, email, hashedPassword) {
 
 function getUserByUsername(username) {
   const sql = `SELECT id, username, email, password FROM users WHERE username = ?;`;
+  
   return new Promise((resolve, reject) => {
     db.get(sql, [username], (err, row) => {
       if (err) return reject(err);
