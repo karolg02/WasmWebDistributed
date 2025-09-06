@@ -4,7 +4,6 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
         return;
     }
 
-    // 1. Przygotuj dane workerów
     const activeWorkers = selectedWorkerIds
         .map(id => ({
             id,
@@ -20,14 +19,11 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
 
     console.log(`[TasksDivider] Distributing ${tasks.length} tasks among ${activeWorkers.length} workers`);
 
-    // 2. Oblicz wagi i podział zadań
     const totalScore = activeWorkers.reduce((sum, w) => sum + w.score, 0);
     const distribution = distributeTasksWithFixedBatches(tasks, activeWorkers, totalScore);
 
-    // 3. Wyślij zadania - zawsze 10 paczek na workera
     await sendTasksToWorkers(distribution, clientId, originalTaskParams, channel);
 
-    // 4. Zwróć statystyki
     return {
         totalTasks: tasks.length,
         workersUsed: activeWorkers.length,
@@ -41,7 +37,6 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
     };
 }
 
-// NAJLEPSZA WERSJA - Weighted Round Robin
 function distributeTasksWithFixedBatches(tasks, workers, totalScore) {
     const distribution = workers.map(worker => ({
         workerId: worker.id,
@@ -52,9 +47,7 @@ function distributeTasksWithFixedBatches(tasks, workers, totalScore) {
         quota: 0
     }));
 
-    // Weighted round-robin assignment
     for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
-        // Znajdź workera z największym deficytem
         let bestWorker = null;
         let maxDeficit = -1;
 
@@ -73,7 +66,6 @@ function distributeTasksWithFixedBatches(tasks, workers, totalScore) {
         }
     }
 
-    // Podziel zadania każdego workera na paczki
     for (const worker of distribution) {
         worker.batches = createFixedBatches(worker.tasks, 10);
     }
@@ -81,22 +73,18 @@ function distributeTasksWithFixedBatches(tasks, workers, totalScore) {
     return distribution;
 }
 
-// Tworzy dokładnie N paczek (lub mniej jeśli za mało zadań)
 function createFixedBatches(tasks, targetBatchCount) {
     if (tasks.length === 0) return [];
     
-    // Jeśli zadań mniej niż docelowa liczba paczek, rób po 1 zadaniu na paczkę
     const actualBatchCount = Math.min(targetBatchCount, tasks.length);
     const batches = [];
     
-    // Oblicz rozmiar każdej paczki
     const baseBatchSize = Math.floor(tasks.length / actualBatchCount);
     const remainder = tasks.length % actualBatchCount;
     
     let currentIndex = 0;
     
     for (let i = 0; i < actualBatchCount; i++) {
-        // Pierwsze 'remainder' paczek dostają po 1 dodatkowe zadanie
         const batchSize = baseBatchSize + (i < remainder ? 1 : 0);
         const batch = tasks.slice(currentIndex, currentIndex + batchSize);
         
@@ -107,7 +95,6 @@ function createFixedBatches(tasks, targetBatchCount) {
     return batches;
 }
 
-// Wysyłanie zadań - każdy worker dostaje swoje paczki
 async function sendTasksToWorkers(distribution, clientId, originalTaskParams, channel) {
     const sendPromises = [];
     
@@ -117,7 +104,6 @@ async function sendTasksToWorkers(distribution, clientId, originalTaskParams, ch
         const queueName = `tasks.worker_${workerDist.workerId}`;
         console.log(`[TasksDivider] Worker ${workerDist.workerId}: ${workerDist.tasks.length} tasks in ${workerDist.batches.length} batches`);
         
-        // Wyślij każdą paczkę osobno
         for (let batchIndex = 0; batchIndex < workerDist.batches.length; batchIndex++) {
             const batch = workerDist.batches[batchIndex].map(task => ({
                 ...task,

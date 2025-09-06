@@ -37,12 +37,6 @@ function uploadWasmHandler(activeCustomFunctions, io, tempDir) {
                 sanitizedId: sanitizedId
             });
 
-            io.of("/worker").emit("custom_wasm_available", {
-                clientId,
-                sanitizedId,
-                timestamp: Date.now()
-            });
-
             res.json({
                 success: true,
                 message: "Pliki przesłane pomyślnie",

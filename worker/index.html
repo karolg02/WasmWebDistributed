@@ -58,6 +58,7 @@
 
             let socket;
             let mainLatency;
+            let myWorkerId = null;
 
             initializeButton.onclick = function () {
                 actualNumWorkers = parseInt(workerCountInput.value, 10);
@@ -167,6 +168,7 @@
                 socket = io(`http://${window.location.hostname}:8080/worker`);
 
                 socket.on("connect", () => {
+                    myWorkerId = socket.id;
                     statusDiv.textContent += '\nPołączono z serwerem. Mierzenie opóźnienia...';
                     const pingStart = performance.now();
                     socket.emit("ping_resultSocket");
@@ -181,7 +183,14 @@
                 });
 
                 let nextWorkerIndex = 0;
+                
                 socket.on("task_batch", (batch) => {
+                    if (batch && batch.length > 0 && batch[0].targetWorkerId) {
+                        if (batch[0].targetWorkerId !== myWorkerId) {
+                            return;
+                        }
+                    }
+
                     if (workerPool.length > 0) {
                         const targetWorker = workerPool[nextWorkerIndex % workerPool.length];
                         targetWorker.postMessage({ type: 'task_batch', data: batch });
@@ -190,6 +199,10 @@
                 });
 
                 socket.on("custom_wasm_available", (data) => {
+                    if (data.targetWorkerIds && !data.targetWorkerIds.includes(myWorkerId)) {
+                        return;
+                    }
+                    
                     statusDiv.textContent += `\nWczytuje WASM dla ${data.clientId}`;
                     workerPool.forEach(worker => {
                         worker.postMessage({ type: 'custom_wasm_available', data: data });
@@ -197,6 +210,10 @@
                 });
 
                 socket.on("unload_custom_wasm", (data) => {
+                    if (data.targetWorkerIds && !data.targetWorkerIds.includes(myWorkerId)) {
+                        return;
+                    }
+                    
                     workerPool.forEach(worker => {
                         worker.postMessage({ type: 'unload_custom_wasm', data: data });
                     });

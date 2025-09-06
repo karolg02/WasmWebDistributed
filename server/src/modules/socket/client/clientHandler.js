@@ -59,7 +59,14 @@ function registerClientNamespace(io, channel, workers, broadcastWorkerList, clie
                         start: 0,
                         lastUpdate: 0,
                         method: taskParams.method,
-                        totalSamples: null
+                        totalSamples: null,
+                        selectedWorkerIds: selected
+                    });
+
+                    io.of("/worker").emit("custom_wasm_available", { 
+                        clientId, 
+                        sanitizedId: taskParams.id,
+                        targetWorkerIds: selected
                     });
 
                     await tasksDevider3000(tasks, clientId, selected, taskParams, workers, channel);
@@ -104,6 +111,7 @@ function registerClientNamespace(io, channel, workers, broadcastWorkerList, clie
                     clientTasks.delete(socket.id);
                 }
 
+                const clientState = clientStates.get(socket.id);
                 clientStates.delete(socket.id);
                 waitingClients.delete(socket.id);
 
@@ -115,7 +123,13 @@ function registerClientNamespace(io, channel, workers, broadcastWorkerList, clie
                 if (activeCustomFunctions.has(socket.id)) {
                     deleteClientFiles(socket.id, tempDir);
                     activeCustomFunctions.delete(socket.id);
-                    io.of("/worker").emit("unload_custom_wasm", { clientId: socket.id, sanitizedId: sanitizeJsIdentifier(socket.id) });
+                    
+                    const targetWorkerIds = clientState?.selectedWorkerIds || [];
+                    io.of("/worker").emit("unload_custom_wasm", { 
+                        clientId: socket.id, 
+                        sanitizedId: sanitizeJsIdentifier(socket.id),
+                        targetWorkerIds: targetWorkerIds
+                    });
                 }
             });
         });
