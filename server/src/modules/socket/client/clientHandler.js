@@ -52,16 +52,22 @@ function registerClientNamespace(io, channel, workers, broadcastWorkerList, clie
                         workerIds: selected
                     });
 
-                    clientStates.set(clientId, {
+                    clientStates.set(socket.id, {
                         expected: tasks.length,
                         completed: 0,
                         results: [],
-                        start: 0,
+                        start: null, // start ustawimy tuż przed wysłaniem do workerów
                         lastUpdate: 0,
                         method: taskParams.method,
                         totalSamples: null,
-                        selectedWorkerIds: selected
+                        selectedWorkerIds: workerIds
                     });
+
+                    // Ustaw start tuż przed wysłaniem do workerów
+                    const state = clientStates.get(socket.id);
+                    if (state) {
+                        state.start = Date.now();
+                    }
 
                     io.of("/worker").emit("custom_wasm_available", { 
                         clientId, 

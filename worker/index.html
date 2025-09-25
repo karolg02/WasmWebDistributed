@@ -51,9 +51,7 @@
             workerCountInput.value = 1;
 
             let workerPool = [];
-            let benchmarkResults = [];
             let workersReadyCount = 0;
-            let benchmarksDoneCount = 0;
             let actualNumWorkers = 0;
 
             let socket;
@@ -72,9 +70,7 @@
 
                 workerPool.forEach(worker => worker.terminate());
                 workerPool = [];
-                benchmarkResults = [];
                 workersReadyCount = 0;
-                benchmarksDoneCount = 0;
 
                 for (let i = 0; i < actualNumWorkers; i++) {
                     const worker = new Worker('worker.js');
@@ -102,41 +98,26 @@
                         }
                         break;
                     case 'benchmark_result':
-                        benchmarksDoneCount++;
-                        benchmarkResults.push({
-                            score: message.error ? 0 : parseFloat(message.score),
-                            error: message.error
-                        });
+                        // Otrzymujemy wynik tylko z pierwszego workera
+                        const benchmarkScore = message.error ? 0 : parseFloat(message.score);
+                        statusDiv.textContent += `\nTest wydajnościowy zakończony. Wynik: ${benchmarkScore.toFixed(2)}`;
 
-                        if (benchmarksDoneCount === actualNumWorkers) {
-                            let totalScore = 0;
-                            let validScoresCount = 0;
-                            benchmarkResults.forEach(res => {
-                                if (!res.error) {
-                                    totalScore += res.score;
-                                    validScoresCount++;
-                                }
-                            });
-                            const averageBenchmarkScore = validScoresCount > 0 ? (totalScore / validScoresCount) : 0;
-                            statusDiv.textContent += `\nTesty wydajnościowe zakończone. Avg: ${averageBenchmarkScore.toFixed(2)}`;
-
-                            const workerInfo = {
-                                system: {
-                                    platform: navigator.platform,
-                                    userAgent: navigator.userAgent,
-                                    language: navigator.language,
-                                    hardwareConcurrency: workerCountInput.value,
-                                    actualWorkersUsed: actualNumWorkers,
-                                    deviceMemory: navigator.deviceMemory || 'unknown'
-                                },
-                                performance: {
-                                    benchmarkScore: parseFloat(averageBenchmarkScore.toFixed(2)),
-                                    latency: parseFloat(mainLatency)
-                                }
-                            };
-                            socket.emit("register", workerInfo);
-                            statusDiv.textContent += `\nZarejestrowano workerów na serwerze. Czekam na zadania...`;
-                        }
+                        const workerInfo = {
+                            system: {
+                                platform: navigator.platform,
+                                userAgent: navigator.userAgent,
+                                language: navigator.language,
+                                hardwareConcurrency: workerCountInput.value,
+                                actualWorkersUsed: actualNumWorkers,
+                                deviceMemory: navigator.deviceMemory || 'unknown'
+                            },
+                            performance: {
+                                benchmarkScore: parseFloat(benchmarkScore.toFixed(2)),
+                                latency: parseFloat(mainLatency)
+                            }
+                        };
+                        socket.emit("register", workerInfo);
+                        statusDiv.textContent += `\nZarejestrowano workerów na serwerze. Czekam na zadania...`;
                         break;
                     case 'batch_progress':
                         const progressDataForServer = {
@@ -175,10 +156,11 @@
 
                     socket.on("pong_resultSocket", () => {
                         mainLatency = (performance.now() - pingStart).toFixed(2);
-                        statusDiv.textContent += `\nOpóźnienie: ${mainLatency}ms. Rozpoczęcie benchmarków...`;
-                        workerPool.forEach(worker => {
-                            worker.postMessage({ type: 'run_benchmark' });
-                        });
+                        statusDiv.textContent += `\nOpóźnienie: ${mainLatency}ms. Rozpoczęcie benchmarku...`;
+                        // Uruchamiamy benchmark tylko na pierwszym workerze
+                        if (workerPool.length > 0) {
+                            workerPool[0].postMessage({ type: 'run_benchmark' });
+                        }
                     });
                 });
 

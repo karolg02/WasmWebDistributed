@@ -30,7 +30,7 @@ export const useSocket = () => {
         if (!socket) return;
 
         const onWorkerUpdate = (data: Worker[]) => setWorkers(Array.isArray(data) ? data : []);
-        const onTaskProgress = (data: Progress) => {
+        const onTaskProgress = (data: Progress & { total?: number }) => {
             setProgress(data);
             setIsCalculating(true);
         };

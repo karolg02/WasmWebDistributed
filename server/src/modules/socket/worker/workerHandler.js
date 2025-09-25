@@ -1,4 +1,5 @@
 function registerWorkerNamespace(io, channel, workers, createQueuePerWorker, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList) {
+    const PROGRESS_INTERVAL_MS = 1000;
     io.of("/worker").on("connection", async (socket) => {
             console.log("[Worker] Connected", socket.id);
 
@@ -33,7 +34,6 @@ function registerWorkerNamespace(io, channel, workers, createQueuePerWorker, bro
                 if (!state) return;
 
                 if (state.completed === 0) {
-                    state.start = Date.now();
                     state.method = method;
                     state.results = [];
                 }
@@ -47,12 +47,13 @@ function registerWorkerNamespace(io, channel, workers, createQueuePerWorker, bro
                 state.completed += tasksCount;
 
                 const now = Date.now();
-                if (now - state.lastUpdate >= 1000 || state.completed === state.expected) {
+                if (now - state.lastUpdate >= PROGRESS_INTERVAL_MS || state.completed === state.expected) {
                     const clientSocket = clientSockets.get(clientId);
                     if (clientSocket) {
                         clientSocket.emit("task_progress", {
                             done: state.completed,
-                            elapsedTime: Math.max(0, (now - state.start) / 1000)
+                            elapsedTime: Math.max(0, (now - state.start) / 1000),
+                            total: state.expected
                         });
                     }
                     state.lastUpdate = now;
@@ -62,12 +63,12 @@ function registerWorkerNamespace(io, channel, workers, createQueuePerWorker, bro
                     try {
                         const rawResult = await getClientResult(clientId, state.results, activeCustomFunctions, tempDir);
                         const clientSocket = clientSockets.get(clientId);
-
+                        const now = Date.now();
+                        const duration = state.start ? (now - state.start) / 1000 : null; // licz czas tuż przed wysłaniem!
                         if (clientSocket) {
                             clientSocket.emit("final_result", {
                                 result: rawResult,
-                                duration: ((now - state.start) / 1000).toFixed(2),
-                                resultsCount: state.results.length
+                                duration // <-- przekazuj duration
                             });
                         }
                     } catch (error) {

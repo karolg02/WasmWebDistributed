@@ -15,6 +15,7 @@ export type AllTaskParams = CustomParams1D | CustomParams2D;
 export interface Progress {
     done: number;
     elapsedTime: number;
+    total?: number; // <-- dodaj opcjonalne pole
 }
 
 export interface QueueStatus {

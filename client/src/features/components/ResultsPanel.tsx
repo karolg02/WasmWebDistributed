@@ -29,6 +29,9 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({
     const [localStartTime, setLocalStartTime] = useState<number | null>(null);
 
     const getTotalTasks = () => {
+        if (typeof progress.total === 'number' && progress.total > 0) {
+            return progress.total;
+        }
         if (taskParams.params && Array.isArray(taskParams.params)) {
             if (method === 'custom1D') {
                 return taskParams.params[2] || 0;
