@@ -54,6 +54,43 @@
             let workersReadyCount = 0;
             let actualNumWorkers = 0;
 
+            const pendingTasks = [];
+            let currentClientId = null;
+            const STATIC_CHUNK_SIZE = 100;
+            const workerBusy = new Map();
+            let dispatchIntervalId = null;
+            const workerAssignedRemaining = new Map();
+
+            function initWorkerBusy() {
+                workerPool.forEach(w => workerBusy.set(w.id, false));
+            }
+
+            function computeChunkSize() {
+                return Math.min(pendingTasks.length, STATIC_CHUNK_SIZE);
+            }
+
+            function dispatchChunks() {
+                if (!workerPool || workerPool.length === 0) return;
+                for (let i = 0; i < workerPool.length; i++) {
+                    const w = workerPool[i];
+                    if (workerBusy.get(w.id)) continue;
+                    if (pendingTasks.length === 0) break;
+
+                    const chunkSize = Math.min(pendingTasks.length, computeChunkSize());
+                    const chunk = pendingTasks.splice(0, chunkSize);
+                    if (chunk.length === 0) break;
+
+                        workerBusy.set(w.id, true);
+                        workerAssignedRemaining.set(w.id, chunk.length);
+                        try {
+                            w.postMessage({ type: 'task_batch', data: chunk });
+                        } catch (err) {
+                            statusDiv.textContent += `\nFailed to postMessage to worker ${w.id}: ${err.message}`;
+                            workerBusy.set(w.id, false);
+                        }
+                }
+            }
+
             let socket;
             let mainLatency;
             let myWorkerId = null;
@@ -86,6 +123,12 @@
                     };
                     workerPool.push(worker);
                 }
+                initWorkerBusy();
+
+                if (dispatchIntervalId) clearInterval(dispatchIntervalId);
+                dispatchIntervalId = setInterval(() => {
+                    dispatchChunks();
+                }, 200);
             };
 
 
@@ -98,7 +141,6 @@
                         }
                         break;
                     case 'benchmark_result':
-                        // Otrzymujemy wynik tylko z pierwszego workera
                         const benchmarkScore = message.error ? 0 : parseFloat(message.score);
                         statusDiv.textContent += `\nTest wydajnościowy zakończony. Wynik: ${benchmarkScore.toFixed(2)}`;
 
@@ -120,6 +162,14 @@
                         statusDiv.textContent += `\nZarejestrowano workerów na serwerze. Czekam na zadania...`;
                         break;
                     case 'batch_progress':
+                        const processed = Number(message.data.tasksProcessedInChunk) || 0;
+                        const prevRemaining = workerAssignedRemaining.get(workerId) || 0;
+                        const newRemaining = Math.max(0, prevRemaining - processed);
+                        workerAssignedRemaining.set(workerId, newRemaining);
+                        if (newRemaining === 0) {
+                            workerBusy.set(workerId, false);
+                            dispatchChunks();
+                        }
                         const progressDataForServer = {
                             clientId: message.data.clientId,
                             results: message.data.results,
@@ -128,7 +178,11 @@
                             a: message.data.a,
                             b: message.data.b,
                         };
-                        socket.emit("batch_result", progressDataForServer);
+                            if (socket && socket.connected) {
+                                socket.emit("batch_result", progressDataForServer);
+                            } else {
+                                statusDiv.textContent += `\nSocket not ready, skipping sending result for ${progressDataForServer.clientId}`;
+                            }
                         break;
                     case 'task_error':
                         socket.emit("task_error", message.data);
@@ -157,7 +211,6 @@
                     socket.on("pong_resultSocket", () => {
                         mainLatency = (performance.now() - pingStart).toFixed(2);
                         statusDiv.textContent += `\nOpóźnienie: ${mainLatency}ms. Rozpoczęcie benchmarku...`;
-                        // Uruchamiamy benchmark tylko na pierwszym workerze
                         if (workerPool.length > 0) {
                             workerPool[0].postMessage({ type: 'run_benchmark' });
                         }
@@ -165,19 +218,23 @@
                 });
 
                 let nextWorkerIndex = 0;
-                
+
                 socket.on("task_batch", (batch) => {
-                    if (batch && batch.length > 0 && batch[0].targetWorkerId) {
+                    if (!batch || batch.length === 0) return;
+
+                    if (batch && batch[0].targetWorkerId) {
                         if (batch[0].targetWorkerId !== myWorkerId) {
                             return;
                         }
                     }
+                    const batchClientId = batch[0].clientId;
 
-                    if (workerPool.length > 0) {
-                        const targetWorker = workerPool[nextWorkerIndex % workerPool.length];
-                        targetWorker.postMessage({ type: 'task_batch', data: batch });
-                        nextWorkerIndex++;
-                    }
+                    if (!currentClientId) currentClientId = batchClientId;
+
+                    pendingTasks.push(...batch);
+
+                    if (workerBusy.size !== workerPool.length) initWorkerBusy();
+                    dispatchChunks();
                 });
 
                 socket.on("custom_wasm_available", (data) => {

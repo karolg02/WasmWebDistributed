@@ -186,7 +186,8 @@ async function processBatch(batch, moduleInstance) {
                         isFinalChunk: (i + 1) === batch.length,
                         method: method,
                         a: batchA,
-                        b: batchB
+                        b: batchB,
+                        chunkComplete: (i + 1) === batch.length
                     }
                 });
                 resultsForCurrentChunk = [];
