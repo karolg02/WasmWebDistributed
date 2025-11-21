@@ -128,8 +128,8 @@ app.post('/api/login', async (req, res) => {
       password
     } = req.body;
     
-    const token = await auth.login(username, password);
-    res.json({ token });
+    const { token, user } = await auth.login(username, password);
+    res.json({ token, email: user.email, username: user.username });
   } catch (err) {
     res.status(401).json({ error: 'Invalid credentials' });
   }
@@ -137,6 +137,7 @@ app.post('/api/login', async (req, res) => {
 
 // Monitoring endpoints
 app.get('/api/monitoring/user/:email/history', monitoring.getUserTaskHistory);
+app.get('/api/monitoring/user/:email/stats', monitoring.getUserStats);
 app.get('/api/monitoring/task/:taskId/batches', monitoring.getTaskBatches);
 app.get('/api/monitoring/active', monitoring.getActiveTasksStats);
 app.get('/api/monitoring/reassignments', monitoring.getReassignmentStats);

@@ -22,7 +22,14 @@ async function login(username, password) {
   if (!ok) throw new Error('INVALID_CREDENTIALS');
 
   const token = jwt.sign({ id: user.id, username: user.username }, SECRET, { expiresIn: '1d' });
-  return token;
+  return { 
+    token, 
+    user: { 
+      id: user.id, 
+      username: user.username, 
+      email: user.email 
+    } 
+  };
 }
 
 module.exports = { login, register };

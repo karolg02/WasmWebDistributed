@@ -1,6 +1,12 @@
 import { API_URL } from "../../../config";
 
-export const login = async (username: string, password: string): Promise<string> => {
+interface LoginResponse {
+    token: string;
+    email: string;
+    username: string;
+}
+
+export const login = async (username: string, password: string): Promise<LoginResponse> => {
     const response = await fetch(`${API_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -13,7 +19,11 @@ export const login = async (username: string, password: string): Promise<string>
     }
 
     const data = await response.json().catch(() => null);
-    const token = data?.token || data?.accessToken || null;
-    if (!token) throw new Error('No token in response');
-    return token as string;
+    if (!data?.token || !data?.email) throw new Error('Invalid response from server');
+    
+    return {
+        token: data.token,
+        email: data.email,
+        username: data.username
+    };
 }

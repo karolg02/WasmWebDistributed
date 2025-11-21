@@ -16,7 +16,8 @@ import {
     IconCpu,
     IconQuestionMark,
     IconChevronDown,
-    IconLogout
+    IconLogout,
+    IconChartBar
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 
@@ -129,6 +130,34 @@ export const Layout = () => {
                                 </Avatar>
                                 <Text size="sm" fw={500} c={location.pathname === '/clientacc' ? '#7950f2' : 'white'}>
                                     Profil klienta
+                                </Text>
+                            </Group>
+                        </UnstyledButton>
+
+                        <UnstyledButton
+                            onClick={() => navigate('/stats')}
+                            style={{
+                                padding: '8px 16px',
+                                borderRadius: '20px',
+                                background: location.pathname === '/stats' ?
+                                    'linear-gradient(45deg, rgba(121, 80, 242, 0.3), rgba(151, 117, 250, 0.3))' :
+                                    'rgba(255, 255, 255, 0.1)',
+                                backdropFilter: 'blur(10px)',
+                                border: location.pathname === '/stats' ?
+                                    '1px solid rgba(121, 80, 242, 0.5)' :
+                                    '1px solid rgba(255, 255, 255, 0.2)',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                    background: location.pathname === '/stats' ?
+                                        'linear-gradient(45deg, rgba(121, 80, 242, 0.4), rgba(151, 117, 250, 0.4))' :
+                                        'rgba(255, 255, 255, 0.15)',
+                                }
+                            }}
+                        >
+                            <Group gap="xs">
+                                <IconChartBar size={16} color={location.pathname === '/stats' ? '#7950f2' : 'white'} />
+                                <Text size="sm" fw={500} c={location.pathname === '/stats' ? '#7950f2' : 'white'}>
+                                    Statystyki
                                 </Text>
                             </Group>
                         </UnstyledButton>

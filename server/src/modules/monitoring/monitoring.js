@@ -11,34 +11,61 @@ const { taskTracker } = require('../common/taskTracking');
  */
 function getUserTaskHistory(req, res) {
     const { email } = req.params;
-    const limit = parseInt(req.query.limit) || 50;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = parseInt(req.query.offset) || 0;
 
-    const sql = `
-        SELECT 
-            id, client_id, user_email, method, params, 
-            total_tasks, status, worker_ids, 
-            created_at, started_at, completed_at, duration, 
-            result, error
-        FROM tasks_history 
-        WHERE user_email = ?
-        ORDER BY created_at DESC
-        LIMIT ?;
-    `;
+    if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+    }
 
-    db.all(sql, [email, limit], (err, rows) => {
+    // Get total count
+    const countSql = 'SELECT COUNT(*) as total FROM tasks_history WHERE user_email = ?';
+    
+    db.get(countSql, [email], (err, countRow) => {
         if (err) {
-            console.error('[Monitoring] Error fetching task history:', err);
+            console.error('[Monitoring] Error counting tasks:', err);
             return res.status(500).json({ error: 'Database error' });
         }
 
-        const tasks = rows.map(row => ({
-            ...row,
-            params: JSON.parse(row.params),
-            worker_ids: JSON.parse(row.worker_ids),
-            result: row.result ? JSON.parse(row.result) : null
-        }));
+        const total = countRow.total;
+        const totalPages = Math.ceil(total / limit);
 
-        res.json({ tasks });
+        // Get paginated tasks
+        const sql = `
+            SELECT 
+                id, client_id, user_email, method, params, 
+                total_tasks, status, worker_ids, 
+                created_at, started_at, completed_at, duration, 
+                result, error
+            FROM tasks_history 
+            WHERE user_email = ?
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?;
+        `;
+
+        db.all(sql, [email, limit, offset], (err, rows) => {
+            if (err) {
+                console.error('[Monitoring] Error fetching task history:', err);
+                return res.status(500).json({ error: 'Database error' });
+            }
+
+            const tasks = rows.map(row => ({
+                ...row,
+                params: JSON.parse(row.params),
+                worker_ids: JSON.parse(row.worker_ids),
+                result: row.result ? JSON.parse(row.result) : null
+            }));
+
+            res.json({ 
+                tasks,
+                pagination: {
+                    total,
+                    totalPages,
+                    currentPage: Math.floor(offset / limit) + 1,
+                    pageSize: limit
+                }
+            });
+        });
     });
 }
 
@@ -150,11 +177,25 @@ function getSystemStats(req, res) {
                 else resolve({ failedTasks: row.count });
             });
         }),
+        // Pending tasks
+        new Promise((resolve, reject) => {
+            db.get("SELECT COUNT(*) as count FROM tasks_history WHERE status = 'pending'", [], (err, row) => {
+                if (err) reject(err);
+                else resolve({ pendingTasks: row.count });
+            });
+        }),
+        // Running tasks
+        new Promise((resolve, reject) => {
+            db.get("SELECT COUNT(*) as count FROM tasks_history WHERE status = 'running'", [], (err, row) => {
+                if (err) reject(err);
+                else resolve({ runningTasks: row.count });
+            });
+        }),
         // Average duration
         new Promise((resolve, reject) => {
             db.get("SELECT AVG(duration) as avg FROM tasks_history WHERE duration IS NOT NULL", [], (err, row) => {
                 if (err) reject(err);
-                else resolve({ avgDuration: row.avg ? row.avg.toFixed(2) : 0 });
+                else resolve({ avgTaskDuration: row.avg ? parseFloat(row.avg.toFixed(2)) : 0 });
             });
         }),
         // Total reassignments
@@ -163,13 +204,26 @@ function getSystemStats(req, res) {
                 if (err) reject(err);
                 else resolve({ totalReassignments: row.count });
             });
+        }),
+        // Tasks per method
+        new Promise((resolve, reject) => {
+            db.all(`
+                SELECT 
+                    method,
+                    COUNT(*) as count
+                FROM tasks_history
+                GROUP BY method
+            `, [], (err, rows) => {
+                if (err) reject(err);
+                else resolve({ tasksPerMethod: rows });
+            });
         })
     ];
 
     Promise.all(queries)
         .then(results => {
             results.forEach(result => Object.assign(stats, result));
-            res.json({ stats });
+            res.json(stats);
         })
         .catch(err => {
             console.error('[Monitoring] Error fetching system stats:', err);
@@ -177,8 +231,97 @@ function getSystemStats(req, res) {
         });
 }
 
+/**
+ * Get statistics for a specific user
+ */
+function getUserStats(req, res) {
+    const { email } = req.params;
+
+    if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const queries = [
+        // Total tasks count (submissions, not individual computations)
+        new Promise((resolve, reject) => {
+            db.get('SELECT COUNT(*) as count FROM tasks_history WHERE user_email = ?', [email], (err, row) => {
+                if (err) reject(err);
+                else resolve({ totalSubmissions: row.count });
+            });
+        }),
+        // Completed tasks
+        new Promise((resolve, reject) => {
+            db.get("SELECT COUNT(*) as count FROM tasks_history WHERE user_email = ? AND status = 'completed'", [email], (err, row) => {
+                if (err) reject(err);
+                else resolve({ completedTasks: row.count });
+            });
+        }),
+        // Failed tasks
+        new Promise((resolve, reject) => {
+            db.get("SELECT COUNT(*) as count FROM tasks_history WHERE user_email = ? AND status = 'failed'", [email], (err, row) => {
+                if (err) reject(err);
+                else resolve({ failedTasks: row.count });
+            });
+        }),
+        // Pending tasks
+        new Promise((resolve, reject) => {
+            db.get("SELECT COUNT(*) as count FROM tasks_history WHERE user_email = ? AND status = 'pending'", [email], (err, row) => {
+                if (err) reject(err);
+                else resolve({ pendingTasks: row.count });
+            });
+        }),
+        // Running tasks
+        new Promise((resolve, reject) => {
+            db.get("SELECT COUNT(*) as count FROM tasks_history WHERE user_email = ? AND status = 'running'", [email], (err, row) => {
+                if (err) reject(err);
+                else resolve({ runningTasks: row.count });
+            });
+        }),
+        // Total computations (sum of total_tasks)
+        new Promise((resolve, reject) => {
+            db.get("SELECT SUM(total_tasks) as sum FROM tasks_history WHERE user_email = ?", [email], (err, row) => {
+                if (err) reject(err);
+                else resolve({ totalComputations: row.sum || 0 });
+            });
+        }),
+        // Average duration
+        new Promise((resolve, reject) => {
+            db.get("SELECT AVG(duration) as avg FROM tasks_history WHERE user_email = ? AND duration IS NOT NULL", [email], (err, row) => {
+                if (err) reject(err);
+                else resolve({ avgTaskDuration: row.avg ? parseFloat(row.avg.toFixed(2)) : 0 });
+            });
+        }),
+        // Tasks per method
+        new Promise((resolve, reject) => {
+            db.all(`
+                SELECT 
+                    method,
+                    COUNT(*) as count
+                FROM tasks_history
+                WHERE user_email = ?
+                GROUP BY method
+            `, [email], (err, rows) => {
+                if (err) reject(err);
+                else resolve({ tasksPerMethod: rows });
+            });
+        })
+    ];
+
+    Promise.all(queries)
+        .then(results => {
+            const userStats = {};
+            results.forEach(result => Object.assign(userStats, result));
+            res.json(userStats);
+        })
+        .catch(err => {
+            console.error('[Monitoring] Error fetching user stats:', err);
+            res.status(500).json({ error: 'Database error' });
+        });
+}
+
 module.exports = {
     getUserTaskHistory,
+    getUserStats,
     getTaskBatches,
     getActiveTasksStats,
     getReassignmentStats,

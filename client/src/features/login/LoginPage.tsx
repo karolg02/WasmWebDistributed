@@ -16,8 +16,10 @@ export const LoginPage: FC = () => {
 
     const handleSubmit = async (data: LoginFormType) => {
         try {
-            const token = await loginApi(data.email, data.password);
-            localStorage.setItem('token', token);
+            const loginData = await loginApi(data.email, data.password);
+            localStorage.setItem('token', loginData.token);
+            localStorage.setItem('userEmail', loginData.email);
+            localStorage.setItem('username', loginData.username);
             window.dispatchEvent(new Event('auth'));
 
             showNotification({ color: 'green', title: 'Zalogowano', message: 'Witaj!'});

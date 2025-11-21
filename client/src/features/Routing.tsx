@@ -4,6 +4,7 @@ import { Layout } from "../layout/Layout";
 import { MainPage } from "./mainpage/MainPage";
 import { ClientAcc } from "./clientacc/ClientAcc";
 import { Help } from "./help/Help";
+import { Stats } from "./stats/Stats";
 import { useIsLogged } from "../hooks/useIsLogged";
 import { LoginPage } from "./login/LoginPage";
 import { RegisterPage } from "./register/RegisterPage";
@@ -23,6 +24,7 @@ export const Routing = () => {
         { path: '/home', element: <MainPage /> },
         { path: 'client', element: <TasksPanel /> },
         { path: 'clientacc', element: <ClientAcc /> },
+        { path: 'stats', element: <Stats /> },
         { path: 'help', element: <Help /> },
       ],
     },
