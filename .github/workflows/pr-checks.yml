@@ -55,7 +55,7 @@ jobs:
         fi
     
     - name: Add PR comment with checks summary
-      uses: actions/github-script@v7
+      uses: actions/github-script@v8
       with:
         script: |
           const changedCount = ${{ steps.changed-files.outputs.changed_count }};
