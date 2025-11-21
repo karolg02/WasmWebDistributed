@@ -5,7 +5,7 @@
   "dependencies": {
     "@mantine/core": "^8.0.0",
     "@mantine/form": "^8.2.7",
-    "@mantine/hooks": "^8.0.0",
+    "@mantine/hooks": "^8.3.8",
     "@mantine/notifications": "^8.0.0",
     "@tabler/icons-react": "^3.31.0",
     "@testing-library/dom": "^10.4.0",
