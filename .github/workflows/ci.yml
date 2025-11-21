@@ -74,20 +74,3 @@ jobs:
         files: ./server/coverage/lcov.info
         flags: server
         fail_ci_if_error: false
-
-  status-check:
-    name: All Tests Passed
-    runs-on: ubuntu-latest
-    needs: [server-lint, server-test]
-    if: always()
-    
-    steps:
-    - name: Check if all jobs succeeded
-      run: |
-        if [[ "${{ needs.server-lint.result }}" != "success" ]] || \
-           [[ "${{ needs.server-test.result }}" != "success" ]] || \
-           [[ "${{ needs.client-build.result }}" != "success" ]]; then
-          echo "Some jobs failed!"
-          exit 1
-        fi
-        echo "All jobs passed successfully!"
