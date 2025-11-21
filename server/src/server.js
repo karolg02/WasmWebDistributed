@@ -15,9 +15,10 @@ const { uploadWasmHandler } = require("./modules/common/uploadWasm");
 const { registerWorkerNamespace } = require("./modules/socket/worker/workerHandler");
 const { registerClientNamespace } = require("./modules/socket/client/clientHandler");
 const { getMulterUpload, ensureTempDir } = require("./modules/common/config");
-const { configureExpress, registerRoutes } = require("./modules/common/expressConfig");
+const { configureExpress, registerRoutes } = require('./modules/common/expressConfig');
 const db = require('./modules/common/db');
 const auth = require('./modules/socket/auth');
+const monitoring = require('./modules/monitoring/monitoring');
 
 const app = express();
 configureExpress(app);
@@ -133,3 +134,10 @@ app.post('/api/login', async (req, res) => {
     res.status(401).json({ error: 'Invalid credentials' });
   }
 });
+
+// Monitoring endpoints
+app.get('/api/monitoring/user/:email/history', monitoring.getUserTaskHistory);
+app.get('/api/monitoring/task/:taskId/batches', monitoring.getTaskBatches);
+app.get('/api/monitoring/active', monitoring.getActiveTasksStats);
+app.get('/api/monitoring/reassignments', monitoring.getReassignmentStats);
+app.get('/api/monitoring/stats', monitoring.getSystemStats);

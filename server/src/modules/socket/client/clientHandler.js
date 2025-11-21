@@ -1,6 +1,8 @@
 const { createTasks } = require("../../createTasks");
 const { sanitizeJsIdentifier, verifyToken } = require("../../utils/utils");
 const { deleteClientFiles } = require("../../utils/deleteClientFiles");
+const { taskTracker } = require('../../common/taskTracking');
+const { createTaskHistory, updateTaskHistory } = require('../../common/db');
 
 function registerClientNamespace(io, channel, workers, broadcastWorkerList, clientStates, clientSockets, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList) {
     io.of("/client").on("connection", (socket) => {
@@ -42,6 +44,23 @@ function registerClientNamespace(io, channel, workers, broadcastWorkerList, clie
                 const tasks = await createTasks(taskParams);
                 const allAvailable = selected.every(id => !workerLocks.has(id));
 
+                // Zapisz zadanie do historii w DB
+                let taskHistoryId = null;
+                try {
+                    const historyResult = await createTaskHistory(
+                        clientId,
+                        socket.user?.email || socket.user?.username || 'unknown',
+                        taskParams.method,
+                        taskParams.params,
+                        tasks.length,
+                        selected
+                    );
+                    taskHistoryId = historyResult.id;
+                    console.log(`[Client] Created task history ${taskHistoryId} for client ${clientId}`);
+                } catch (error) {
+                    console.error('[Client] Error creating task history:', error);
+                }
+
                 if (allAvailable) {
                     for (const id of selected) {
                         workerLocks.set(id, clientId);
@@ -49,24 +68,38 @@ function registerClientNamespace(io, channel, workers, broadcastWorkerList, clie
 
                     clientTasks.set(clientId, {
                         socket,
-                        workerIds: selected
+                        workerIds: selected,
+                        taskHistoryId,
+                        taskParams
                     });
 
                     clientStates.set(socket.id, {
                         expected: tasks.length,
                         completed: 0,
                         results: [],
-                        start: null, // start ustawimy tuż przed wysłaniem do workerów
+                        start: null,
                         lastUpdate: 0,
                         method: taskParams.method,
                         totalSamples: null,
-                        selectedWorkerIds: workerIds
+                        selectedWorkerIds: workerIds,
+                        taskHistoryId
                     });
+
+                    // Initialize task tracking
+                    taskTracker.initializeTask(clientId, taskHistoryId, tasks.length);
 
                     // Ustaw start tuż przed wysłaniem do workerów
                     const state = clientStates.get(socket.id);
                     if (state) {
                         state.start = Date.now();
+                        
+                        // Update DB with start time
+                        if (taskHistoryId) {
+                            await updateTaskHistory(taskHistoryId, {
+                                status: 'running',
+                                started_at: state.start
+                            });
+                        }
                     }
 
                     io.of("/worker").emit("custom_wasm_available", { 
@@ -75,14 +108,15 @@ function registerClientNamespace(io, channel, workers, broadcastWorkerList, clie
                         targetWorkerIds: selected
                     });
 
-                    await tasksDevider3000(tasks, clientId, selected, taskParams, workers, channel);
+                    await tasksDevider3000(tasks, clientId, selected, taskParams, workers, channel, taskHistoryId);
                     broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
                 } else {
                     waitingClients.set(clientId, {
                         socket,
                         workerIds: selected,
                         tasks,
-                        taskParams
+                        taskParams,
+                        taskHistoryId
                     });
 
                     for (const id of selected) {

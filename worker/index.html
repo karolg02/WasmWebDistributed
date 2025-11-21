@@ -60,6 +60,8 @@
             const workerBusy = new Map();
             let dispatchIntervalId = null;
             const workerAssignedRemaining = new Map();
+            const completedTaskIds = new Set(); // Track completed task IDs
+            let heartbeatInterval = null; // Heartbeat interval ID
 
             function initWorkerBusy() {
                 workerPool.forEach(w => workerBusy.set(w.id, false));
@@ -80,14 +82,14 @@
                     const chunk = pendingTasks.splice(0, chunkSize);
                     if (chunk.length === 0) break;
 
-                        workerBusy.set(w.id, true);
-                        workerAssignedRemaining.set(w.id, chunk.length);
-                        try {
-                            w.postMessage({ type: 'task_batch', data: chunk });
-                        } catch (err) {
-                            statusDiv.textContent += `\nFailed to postMessage to worker ${w.id}: ${err.message}`;
-                            workerBusy.set(w.id, false);
-                        }
+                    workerBusy.set(w.id, true);
+                    workerAssignedRemaining.set(w.id, chunk.length);
+                    try {
+                        w.postMessage({ type: 'task_batch', data: chunk });
+                    } catch (err) {
+                        statusDiv.textContent += `\nFailed to postMessage to worker ${w.id}: ${err.message}`;
+                        workerBusy.set(w.id, false);
+                    }
                 }
             }
 
@@ -160,6 +162,9 @@
                         };
                         socket.emit("register", workerInfo);
                         statusDiv.textContent += `\nZarejestrowano workerów na serwerze. Czekam na zadania...`;
+                        
+                        // Start heartbeat
+                        startHeartbeat();
                         break;
                     case 'batch_progress':
                         const processed = Number(message.data.tasksProcessedInChunk) || 0;
@@ -170,19 +175,26 @@
                             workerBusy.set(workerId, false);
                             dispatchChunks();
                         }
+                        
+                        // Track completed task IDs
+                        const taskIds = message.data.completedTaskIds || [];
+                        taskIds.forEach(id => completedTaskIds.add(id));
+                        
                         const progressDataForServer = {
                             clientId: message.data.clientId,
                             results: message.data.results,
                             tasksCount: message.data.tasksProcessedInChunk,
                             method: message.data.method,
+                            completedTaskIds: taskIds,
                             a: message.data.a,
                             b: message.data.b,
                         };
-                            if (socket && socket.connected) {
-                                socket.emit("batch_result", progressDataForServer);
-                            } else {
-                                statusDiv.textContent += `\nSocket not ready, skipping sending result for ${progressDataForServer.clientId}`;
-                            }
+                        
+                        if (socket && socket.connected) {
+                            socket.emit("batch_result", progressDataForServer);
+                        } else {
+                            statusDiv.textContent += `\nSocket not ready, skipping sending result for ${progressDataForServer.clientId}`;
+                        }
                         break;
                     case 'task_error':
                         socket.emit("task_error", message.data);
@@ -196,6 +208,37 @@
                     case 'custom_module_loaded':
                         socket.emit("custom_module_loaded", { clientId: message.data.clientId });
                         break;
+                }
+            }
+
+            function startHeartbeat() {
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                }
+                
+                heartbeatInterval = setInterval(() => {
+                    if (socket && socket.connected) {
+                        const activeTasks = workerPool.reduce((sum, w) => {
+                            return sum + (workerAssignedRemaining.get(w.id) || 0);
+                        }, 0);
+                        
+                        socket.emit('heartbeat', {
+                            activeTasksCount: activeTasks,
+                            memoryUsage: performance.memory?.usedJSHeapSize,
+                            timestamp: Date.now(),
+                            completedTasksTotal: completedTaskIds.size
+                        });
+                    }
+                }, 5000); // co 5 sekund
+                
+                statusDiv.textContent += '\nHeartbeat uruchomiony (5s interval)';
+            }
+            
+            function stopHeartbeat() {
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                    statusDiv.textContent += '\nHeartbeat zatrzymany';
                 }
             }
 
@@ -229,7 +272,14 @@
                     }
                     const batchClientId = batch[0].clientId;
 
-                    if (!currentClientId) currentClientId = batchClientId;
+                    if (!currentClientId) {
+                        currentClientId = batchClientId;
+                    } else if (currentClientId !== batchClientId) {
+                        // Nowy klient - wyczyść completed tasks
+                        completedTaskIds.clear();
+                        currentClientId = batchClientId;
+                        statusDiv.textContent += `\nNowy klient ${batchClientId}, resetowanie tracking`;
+                    }
 
                     pendingTasks.push(...batch);
 
@@ -265,6 +315,7 @@
 
                 socket.on("disconnect", (reason) => {
                     statusDiv.textContent += `\nOdłączono od serwera - ${reason}`;
+                    stopHeartbeat();
                 });
             }
 

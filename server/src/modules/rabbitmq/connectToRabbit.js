@@ -10,8 +10,23 @@ async function connectToRabbitMQ() {
     
     while (retries < maxRetries) {
         try {
-            connection = await amqp.connect(`amqp://${amqpHost}:5672`);
+            connection = await amqp.connect(`amqp://${amqpHost}:5672`, {
+                heartbeat: 60 // Zwiększony heartbeat timeout do 60s
+            });
+            
+            // Handle connection errors
+            connection.on('error', (err) => {
+                console.error('[RabbitMQ] Connection error:', err.message);
+            });
+            
+            connection.on('close', () => {
+                console.log('[RabbitMQ] Connection closed');
+            });
+            
             channel = await connection.createChannel();
+            
+            // Set prefetch to avoid overloading
+            await channel.prefetch(1);
             
             return { connection, channel };
         } catch (error) {

@@ -38,6 +38,7 @@ function runBenchmark() {
 
 self.onmessage = async function (event) {
     const message = event.data;
+    
     switch (message.type) {
         case 'run_benchmark':
             runBenchmark();
@@ -137,6 +138,7 @@ async function processBatch(batch, moduleInstance) {
 
     let tasksProcessedInCurrentChunk = 0;
     let resultsForCurrentChunk = [];
+    let completedTaskIdsInChunk = []; // Track completed task IDs
     const TASKS_PER_PROGRESS_UPDATE = 100;
     const TASKS_BETWEEN_YIELDS = 10;
 
@@ -166,6 +168,12 @@ async function processBatch(batch, moduleInstance) {
 
                 if (result !== undefined && !isNaN(result)) {
                     resultsForCurrentChunk.push(result);
+                    
+                    const taskId = data.taskId;
+                    if (taskId !== undefined && taskId !== null) {
+                        completedTaskIdsInChunk.push(taskId);
+                    }
+                    
                     tasksProcessedInCurrentChunk++;
                 } else {
                     console.error(`[Worker] Invalid result from task ${data.taskId}:`, result);
@@ -187,10 +195,12 @@ async function processBatch(batch, moduleInstance) {
                         method: method,
                         a: batchA,
                         b: batchB,
-                        chunkComplete: (i + 1) === batch.length
+                        chunkComplete: (i + 1) === batch.length,
+                        completedTaskIds: completedTaskIdsInChunk
                     }
                 });
                 resultsForCurrentChunk = [];
+                completedTaskIdsInChunk = [];
                 tasksProcessedInCurrentChunk = 0;
             }
             if ((i + 1) % TASKS_BETWEEN_YIELDS === 0 && i < batch.length - 1) {

@@ -1,4 +1,7 @@
-async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTaskParams, workers, channel) {
+const { taskTracker } = require('../common/taskTracking');
+const { createTaskBatch } = require('../common/db');
+
+async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTaskParams, workers, channel, taskHistoryId = null) {
     if (!tasks.length || !selectedWorkerIds.length) {
         console.warn('[TasksDivider] No tasks or workers provided');
         return;
@@ -22,7 +25,7 @@ async function tasksDevider3000(tasks, clientId, selectedWorkerIds, originalTask
     const totalScore = activeWorkers.reduce((sum, w) => sum + w.score, 0);
     const distribution = distributeTasksWithFixedBatches(tasks, activeWorkers, totalScore);
 
-    await sendTasksToWorkers(distribution, clientId, originalTaskParams, channel);
+    await sendTasksToWorkers(distribution, clientId, originalTaskParams, channel, taskHistoryId);
 
     return {
         totalTasks: tasks.length,
@@ -95,7 +98,7 @@ function createFixedBatches(tasks, targetBatchCount) {
     return batches;
 }
 
-async function sendTasksToWorkers(distribution, clientId, originalTaskParams, channel) {
+async function sendTasksToWorkers(distribution, clientId, originalTaskParams, channel, taskHistoryId = null) {
     const sendPromises = [];
     
     for (const workerDist of distribution) {
@@ -112,7 +115,7 @@ async function sendTasksToWorkers(distribution, clientId, originalTaskParams, ch
                 sanitizedId: originalTaskParams.id
             }));
 
-            const sendPromise = new Promise((resolve, reject) => {
+            const sendPromise = (async () => {
                 try {
                     const success = channel.sendToQueue(
                         queueName,
@@ -121,14 +124,37 @@ async function sendTasksToWorkers(distribution, clientId, originalTaskParams, ch
                     );
                     
                     if (success) {
-                        resolve();
+                        // Zapisz batch do DB i taskTracker
+                        let batchDbId = null;
+                        if (taskHistoryId) {
+                            try {
+                                const dbResult = await createTaskBatch(
+                                    taskHistoryId,
+                                    workerDist.workerId,
+                                    batchIndex,
+                                    workerDist.batches[batchIndex]
+                                );
+                                batchDbId = dbResult.id;
+                            } catch (dbError) {
+                                console.error('[TasksDivider] Error saving batch to DB:', dbError);
+                            }
+                        }
+
+                        // Register in task tracker
+                        taskTracker.registerBatch(
+                            clientId,
+                            workerDist.workerId,
+                            batchIndex,
+                            workerDist.batches[batchIndex],
+                            batchDbId
+                        );
                     } else {
-                        reject(new Error(`Failed to send batch ${batchIndex + 1} to ${queueName}`));
+                        throw new Error(`Failed to send batch ${batchIndex + 1} to ${queueName}`);
                     }
                 } catch (error) {
-                    reject(error);
+                    throw error;
                 }
-            });
+            })();
             
             sendPromises.push(sendPromise);
         }
