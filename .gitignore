@@ -2,3 +2,9 @@ node_modules
 .vscode
 rabbit_killer.sh
 temp
+*.log
+coverage/
+.nyc_output/
+build/
+dist/
+.github/workflows/*.log

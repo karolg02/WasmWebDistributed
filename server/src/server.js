@@ -1,34 +1,18 @@
 const express = require('express');
-const router = express.Router();
 const { Server } = require("socket.io");
-
 const http = require("http");
 const path = require('path');
 
+const { createApp } = require('./app');
 const { createQueuePerWorker } = require("./modules/socket/worker/createQueuePerWorker");
 const { connectToRabbitMQ } = require("./modules/rabbitmq/connectToRabbit");
 const { getClientResult } = require("./modules/socket/client/clientResult");
 const { broadcastWorkerList, broadcastWorkerQueueList } = require("./modules/socket/worker/broadcast");
 const { tasksDevider3000 } = require("./modules/utils/tasksDivider3000");
 const { tryToGiveTasksForWaitingClients } = require("./modules/common/tasksForClients");
-const { uploadWasmHandler } = require("./modules/common/uploadWasm");
 const { registerWorkerNamespace } = require("./modules/socket/worker/workerHandler");
 const { registerClientNamespace } = require("./modules/socket/client/clientHandler");
-const { getMulterUpload, ensureTempDir } = require("./modules/common/config");
-const { configureExpress, registerRoutes } = require('./modules/common/expressConfig');
-const db = require('./modules/common/db');
-const auth = require('./modules/socket/auth');
-const monitoring = require('./modules/monitoring/monitoring');
 const { startScheduler } = require('./modules/scheduler/taskScheduler');
-const userService = require('./modules/user/userService');
-
-const app = express();
-configureExpress(app);
-
-const server = http.createServer(app);
-const io = new Server(server, {
-    cors: { origin: "*" }
-});
 
 const workers = new Map();
 const clientSockets = new Map();
@@ -40,11 +24,18 @@ const clientStates = new Map();
 const activeCustomFunctions = new Map();
 
 const tempDir = path.join(__dirname, '../temp');
-ensureTempDir(tempDir);
 
-const upload = getMulterUpload(tempDir);
+// Create server and io first
+const server = http.createServer();
+const io = new Server(server, {
+    cors: { origin: "*" }
+});
 
-registerRoutes(app, upload, uploadWasmHandler(activeCustomFunctions, io, tempDir), tempDir);
+// Then create app with io
+const app = createApp({ io, activeCustomFunctions, tempDir });
+
+// Attach app to server
+server.on('request', app);
 
 let channel = null;
 async function start() {
@@ -102,49 +93,3 @@ async function start() {
 }
 
 start();
-
-app.post('/api/register', async (req, res) => {
-  try {
-    const { 
-      username,
-      email,
-      password
-    } = req.body;
-
-    const token = await auth.register(
-      username,
-      email,
-      password
-    );
-
-    res.json({ token });
-  } catch (err) {
-    if (err.message === 'USER_EXISTS') return res.status(409).json({ error: 'User exists' });
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/login', async (req, res) => {
-  try {
-    const {
-      username,
-      password
-    } = req.body;
-    
-    const { token, user } = await auth.login(username, password);
-    res.json({ token, email: user.email, username: user.username });
-  } catch (err) {
-    res.status(401).json({ error: 'Invalid credentials' });
-  }
-});
-
-app.get('/api/monitoring/user/:email/history', monitoring.getUserTaskHistory);
-app.get('/api/monitoring/user/:email/stats', monitoring.getUserStats);
-app.get('/api/monitoring/task/:taskId/batches', monitoring.getTaskBatches);
-app.get('/api/monitoring/active', monitoring.getActiveTasksStats);
-app.get('/api/monitoring/reassignments', monitoring.getReassignmentStats);
-app.get('/api/monitoring/stats', monitoring.getSystemStats);
-
-app.post('/api/user/change-email', userService.authenticateToken, userService.changeEmail);
-app.post('/api/user/change-password', userService.authenticateToken, userService.changePassword);
-app.get('/api/user/info', userService.authenticateToken, userService.getUserInfo);
