@@ -1,10 +1,10 @@
 const { db } = require('../common/db');
 const { taskTracker } = require('../common/taskTracking');
 
-const CHECK_INTERVAL = 5 * 60 * 1000;
+const CHECK_INTERVAL = 60 * 60 * 1000;
 
 function startScheduler() {
-    console.log('[Scheduler] Starting task cleanup scheduler (interval: 5 minutes)');
+    console.log('[Scheduler] Starting task cleanup scheduler (interval: 60 minutes)');
     runTaskCleanup();
     
     setInterval(runTaskCleanup, CHECK_INTERVAL);

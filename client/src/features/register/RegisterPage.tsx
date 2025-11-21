@@ -33,8 +33,9 @@ export const RegisterPage = () => {
             const token = await Register(data.name, data.surename, data.email, data.password, data.number);
             if (token) {
                 localStorage.setItem('token', token);
+                window.dispatchEvent(new Event('auth'));
                 showNotification({ color: "green", title: "Sukces!", message: "Rejestracja przebiegła pomyślnie!", autoClose: 3000 });
-                navigate('/home');
+                navigate('/home', { replace: true });
             }
         } catch (error) {
             console.error("Nie udało się zarejestrować", error);

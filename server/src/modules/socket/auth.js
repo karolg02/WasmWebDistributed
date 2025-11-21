@@ -32,4 +32,12 @@ async function login(username, password) {
   };
 }
 
-module.exports = { login, register };
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, SECRET);
+  } catch (err) {
+    throw new Error('INVALID_TOKEN');
+  }
+}
+
+module.exports = { login, register, verifyToken };

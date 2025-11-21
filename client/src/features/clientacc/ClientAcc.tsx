@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Container, Paper, Title, Text, Stack, Card, Group, Badge, Loader, Alert, Box, Timeline, RingProgress, Center, Pagination } from "@mantine/core";
-import { IconClock, IconCheck, IconX, IconAlertCircle, IconTrendingUp } from "@tabler/icons-react";
+import { Container, Paper, Title, Text, Stack, Card, Group, Badge, Loader, Alert, Box, Timeline, RingProgress, Center, Pagination, Button, TextInput, PasswordInput, Modal, SimpleGrid } from "@mantine/core";
+import { IconClock, IconCheck, IconX, IconAlertCircle, IconTrendingUp, IconMail, IconKey, IconUser } from "@tabler/icons-react";
+import { useForm } from "@mantine/form";
+import { showNotification } from "@mantine/notifications";
 import { API_URL } from "../../config";
 
 interface TaskHistory {
@@ -33,6 +35,16 @@ interface UserStats {
 
 const TASKS_PER_PAGE = 10;
 
+interface EmailFormValues {
+    newEmail: string;
+}
+
+interface PasswordFormValues {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+}
+
 export function ClientAcc() {
     const [tasks, setTasks] = useState<TaskHistory[]>([]);
     const [userStats, setUserStats] = useState<UserStats | null>(null);
@@ -40,6 +52,23 @@ export function ClientAcc() {
     const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [emailModalOpen, setEmailModalOpen] = useState(false);
+    const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+
+    const emailForm = useForm<EmailFormValues>({
+        initialValues: { newEmail: '' },
+        validate: {
+            newEmail: (value) => (/^\S+@\S+$/.test(value) ? null : 'Nieprawidłowy email'),
+        },
+    });
+
+    const passwordForm = useForm<PasswordFormValues>({
+        initialValues: { currentPassword: '', newPassword: '', confirmPassword: '' },
+        validate: {
+            newPassword: (value) => (value.length >= 6 ? null : 'Hasło musi mieć min. 6 znaków'),
+            confirmPassword: (value, values) => (value === values.newPassword ? null : 'Hasła nie pasują'),
+        },
+    });
 
     useEffect(() => {
         const fetchData = async () => {
@@ -74,6 +103,60 @@ export function ClientAcc() {
 
         fetchData();
     }, [currentPage]);
+
+    const handleEmailChange = async (values: EmailFormValues) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${API_URL}/api/user/change-email`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ newEmail: values.newEmail })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Nie udało się zmienić emaila');
+            }
+
+            localStorage.setItem('userEmail', values.newEmail);
+            showNotification({ color: 'green', title: 'Sukces', message: 'Email został zmieniony' });
+            setEmailModalOpen(false);
+            emailForm.reset();
+        } catch (err) {
+            showNotification({ color: 'red', title: 'Błąd', message: err instanceof Error ? err.message : 'Nieznany błąd' });
+        }
+    };
+
+    const handlePasswordChange = async (values: PasswordFormValues) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${API_URL}/api/user/change-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ 
+                    currentPassword: values.currentPassword,
+                    newPassword: values.newPassword 
+                })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Nie udało się zmienić hasła');
+            }
+
+            showNotification({ color: 'green', title: 'Sukces', message: 'Hasło zostało zmienione' });
+            setPasswordModalOpen(false);
+            passwordForm.reset();
+        } catch (err) {
+            showNotification({ color: 'red', title: 'Błąd', message: err instanceof Error ? err.message : 'Nieznany błąd' });
+        }
+    };
 
     // Pobierz statystyki użytkownika (tylko raz przy montowaniu)
     useEffect(() => {
@@ -179,6 +262,135 @@ export function ClientAcc() {
                     backgroundClip: 'text',
                 }}
             >
+                Profil klienta
+            </Title>
+
+            {/* Zarządzanie kontem */}
+            <Paper
+                p="xl"
+                radius="xl"
+                mb="xl"
+                style={{
+                    background: 'rgba(26, 27, 30, 0.6)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+            >
+                <Title order={3} c="white" mb="lg">
+                    <Group gap="xs">
+                        <IconUser size={24} />
+                        Zarządzanie kontem
+                    </Group>
+                </Title>
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
+                    <Paper p="md" radius="md" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+                        <Group justify="space-between" mb="xs">
+                            <Group gap="xs">
+                                <IconMail size={20} color="#7950f2" />
+                                <Text size="sm" fw={500} c="white">Email</Text>
+                            </Group>
+                        </Group>
+                        <Text size="sm" c="dimmed" mb="md">{localStorage.getItem('userEmail')}</Text>
+                        <Button 
+                            variant="light" 
+                            color="violet" 
+                            size="sm" 
+                            fullWidth
+                            onClick={() => setEmailModalOpen(true)}
+                        >
+                            Zmień email
+                        </Button>
+                    </Paper>
+
+                    <Paper p="md" radius="md" style={{ background: 'rgba(255, 255, 255, 0.05)' }}>
+                        <Group justify="space-between" mb="xs">
+                            <Group gap="xs">
+                                <IconKey size={20} color="#7950f2" />
+                                <Text size="sm" fw={500} c="white">Hasło</Text>
+                            </Group>
+                        </Group>
+                        <Text size="sm" c="dimmed" mb="md">••••••••</Text>
+                        <Button 
+                            variant="light" 
+                            color="violet" 
+                            size="sm" 
+                            fullWidth
+                            onClick={() => setPasswordModalOpen(true)}
+                        >
+                            Zmień hasło
+                        </Button>
+                    </Paper>
+                </SimpleGrid>
+            </Paper>
+
+            {/* Modals */}
+            <Modal
+                opened={emailModalOpen}
+                onClose={() => {
+                    setEmailModalOpen(false);
+                    emailForm.reset();
+                }}
+                title="Zmiana adresu email"
+                centered
+            >
+                <form onSubmit={emailForm.onSubmit(handleEmailChange)}>
+                    <Stack>
+                        <TextInput
+                            label="Nowy adres email"
+                            placeholder="nowy@email.com"
+                            {...emailForm.getInputProps('newEmail')}
+                        />
+                        <Group justify="flex-end">
+                            <Button variant="light" onClick={() => setEmailModalOpen(false)}>
+                                Anuluj
+                            </Button>
+                            <Button type="submit" color="violet">
+                                Zapisz
+                            </Button>
+                        </Group>
+                    </Stack>
+                </form>
+            </Modal>
+
+            <Modal
+                opened={passwordModalOpen}
+                onClose={() => {
+                    setPasswordModalOpen(false);
+                    passwordForm.reset();
+                }}
+                title="Zmiana hasła"
+                centered
+            >
+                <form onSubmit={passwordForm.onSubmit(handlePasswordChange)}>
+                    <Stack>
+                        <PasswordInput
+                            label="Aktualne hasło"
+                            placeholder="Wpisz aktualne hasło"
+                            {...passwordForm.getInputProps('currentPassword')}
+                        />
+                        <PasswordInput
+                            label="Nowe hasło"
+                            placeholder="Wpisz nowe hasło"
+                            {...passwordForm.getInputProps('newPassword')}
+                        />
+                        <PasswordInput
+                            label="Potwierdź nowe hasło"
+                            placeholder="Wpisz ponownie nowe hasło"
+                            {...passwordForm.getInputProps('confirmPassword')}
+                        />
+                        <Group justify="flex-end">
+                            <Button variant="light" onClick={() => setPasswordModalOpen(false)}>
+                                Anuluj
+                            </Button>
+                            <Button type="submit" color="violet">
+                                Zapisz
+                            </Button>
+                        </Group>
+                    </Stack>
+                </form>
+            </Modal>
+
+            <Title order={2} size="2rem" mb="lg" c="white">
                 Historia zadań
             </Title>
 

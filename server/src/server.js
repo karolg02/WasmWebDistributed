@@ -20,6 +20,7 @@ const db = require('./modules/common/db');
 const auth = require('./modules/socket/auth');
 const monitoring = require('./modules/monitoring/monitoring');
 const { startScheduler } = require('./modules/scheduler/taskScheduler');
+const userService = require('./modules/user/userService');
 
 const app = express();
 configureExpress(app);
@@ -137,10 +138,13 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Monitoring endpoints
 app.get('/api/monitoring/user/:email/history', monitoring.getUserTaskHistory);
 app.get('/api/monitoring/user/:email/stats', monitoring.getUserStats);
 app.get('/api/monitoring/task/:taskId/batches', monitoring.getTaskBatches);
 app.get('/api/monitoring/active', monitoring.getActiveTasksStats);
 app.get('/api/monitoring/reassignments', monitoring.getReassignmentStats);
 app.get('/api/monitoring/stats', monitoring.getSystemStats);
+
+app.post('/api/user/change-email', userService.authenticateToken, userService.changeEmail);
+app.post('/api/user/change-password', userService.authenticateToken, userService.changePassword);
+app.get('/api/user/info', userService.authenticateToken, userService.getUserInfo);

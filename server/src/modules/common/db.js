@@ -200,9 +200,43 @@ function reassignTaskBatch(batchId, newWorkerId) {
   });
 }
 
+function updateUserEmail(userId, newEmail) {
+  const sql = `UPDATE users SET email = ? WHERE id = ?;`;
+  
+  return new Promise((resolve, reject) => {
+    db.run(sql, [newEmail, userId], function(err) {
+      if (err) return reject(err);
+      resolve({ changes: this.changes });
+    });
+  });
+}
+
+function updateUserPassword(userId, hashedPassword) {
+  const sql = `UPDATE users SET password = ? WHERE id = ?;`;
+  
+  return new Promise((resolve, reject) => {
+    db.run(sql, [hashedPassword, userId], function(err) {
+      if (err) return reject(err);
+      resolve({ changes: this.changes });
+    });
+  });
+}
+
+function getUserById(userId) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM users WHERE id = ?', [userId], (err, row) => {
+      if (err) return reject(err);
+      resolve(row);
+    });
+  });
+}
+
 module.exports = { 
   createUser, 
-  getUserByUsername, 
+  getUserByUsername,
+  getUserById,
+  updateUserEmail,
+  updateUserPassword,
   db,
   createTaskHistory,
   updateTaskHistory,
