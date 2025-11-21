@@ -19,6 +19,7 @@ const { configureExpress, registerRoutes } = require('./modules/common/expressCo
 const db = require('./modules/common/db');
 const auth = require('./modules/socket/auth');
 const monitoring = require('./modules/monitoring/monitoring');
+const { startScheduler } = require('./modules/scheduler/taskScheduler');
 
 const app = express();
 configureExpress(app);
@@ -92,6 +93,7 @@ async function start() {
 
         server.listen(8080, "0.0.0.0", () => {
             console.log("[Server] Listening on port 8080");
+            startScheduler();
         });
     } catch (error) {
         console.error("[Server] Error during initialization:", error);

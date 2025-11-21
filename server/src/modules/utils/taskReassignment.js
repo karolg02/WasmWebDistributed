@@ -5,6 +5,7 @@
 
 const { taskTracker } = require('../common/taskTracking');
 const { reassignTaskBatch } = require('../common/db');
+const { db } = require('../common/db');
 
 /**
  * Główna funkcja reassignment przy odłączeniu workera
@@ -101,11 +102,18 @@ async function reassignClientTasks(
 
     if (availableWorkers.length === 0) {
         console.warn(`[TaskReassignment] No available workers to reassign tasks for client ${clientId}`);
+        
+        // Oznacz zadanie jako failed w bazie danych
+        markTaskAsFailed(clientId, 'No workers available after disconnect');
+        
+        // Usuń z trackera
+        taskTracker.activeTasks.delete(clientId);
+        
         return {
             clientId,
             success: false,
             reassignedBatches: 0,
-            error: 'No available workers'
+            error: 'No available workers - task marked as failed'
         };
     }
 
@@ -244,9 +252,41 @@ function hasWorkerPendingBatches(workerId) {
     return false;
 }
 
+/**
+ * Oznacza zadanie jako failed w bazie danych
+ */
+function markTaskAsFailed(clientId, errorMessage) {
+    const now = Date.now();
+    
+    // Pobierz task z trackera aby znaleźć ID w bazie
+    const taskInfo = taskTracker.activeTasks.get(clientId);
+    
+    if (!taskInfo) {
+        console.warn(`[TaskReassignment] No task info found for client ${clientId}`);
+        return;
+    }
+    
+    const sql = `
+        UPDATE tasks_history 
+        SET status = 'failed',
+            completed_at = ?,
+            error = ?
+        WHERE client_id = ? AND status IN ('pending', 'running')
+    `;
+    
+    db.run(sql, [now, errorMessage, clientId], function(err) {
+        if (err) {
+            console.error(`[TaskReassignment] Error marking task as failed for client ${clientId}:`, err);
+        } else if (this.changes > 0) {
+            console.log(`[TaskReassignment] Marked task for client ${clientId} as failed: ${errorMessage}`);
+        }
+    });
+}
+
 module.exports = {
     handleWorkerDisconnect,
     reassignClientTasks,
     findAvailableWorkers,
-    hasWorkerPendingBatches
+    hasWorkerPendingBatches,
+    markTaskAsFailed
 };
