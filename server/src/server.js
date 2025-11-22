@@ -3,7 +3,7 @@ const { Server } = require("socket.io");
 const http = require("http");
 const path = require('path');
 
-const { createApp } = require('./app');
+const { createApp, setupRoutes } = require('./app');
 const { createQueuePerWorker } = require("./modules/socket/worker/createQueuePerWorker");
 const { connectToRabbitMQ } = require("./modules/rabbitmq/connectToRabbit");
 const { getClientResult } = require("./modules/socket/client/clientResult");
@@ -12,6 +12,7 @@ const { tasksDevider3000 } = require("./modules/utils/tasksDivider3000");
 const { tryToGiveTasksForWaitingClients } = require("./modules/common/tasksForClients");
 const { registerWorkerNamespace } = require("./modules/socket/worker/workerHandler");
 const { registerClientNamespace } = require("./modules/socket/client/clientHandler");
+const { ensureTempDir } = require("./modules/common/config");
 const { startScheduler } = require('./modules/scheduler/taskScheduler');
 
 const workers = new Map();
@@ -24,18 +25,21 @@ const clientStates = new Map();
 const activeCustomFunctions = new Map();
 
 const tempDir = path.join(__dirname, '../temp');
+ensureTempDir(tempDir);
 
-// Create server and io first
-const server = http.createServer();
+// Create app first
+const app = createApp();
+
+// Create server with app
+const server = http.createServer(app);
+
+// Create io with server
 const io = new Server(server, {
     cors: { origin: "*" }
 });
 
-// Then create app with io
-const app = createApp({ io, activeCustomFunctions, tempDir });
-
-// Attach app to server
-server.on('request', app);
+// Setup routes that need io
+setupRoutes(app, { io, activeCustomFunctions, tempDir });
 
 let channel = null;
 async function start() {

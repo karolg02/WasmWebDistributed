@@ -12,15 +12,18 @@ const monitoring = require('./modules/monitoring/monitoring');
 const userService = require('./modules/user/userService');
 const path = require('path');
 
-function createApp(options = {}) {
+function createApp() {
+  const app = express();
+  configureExpress(app);
+  return app;
+}
+
+function setupRoutes(app, options = {}) {
   const {
     io = null,
     activeCustomFunctions = new Map(),
     tempDir = path.join(__dirname, '../temp')
   } = options;
-
-  const app = express();
-  configureExpress(app);
 
   ensureTempDir(tempDir);
   const upload = getMulterUpload(tempDir);
@@ -66,8 +69,6 @@ function createApp(options = {}) {
   app.post('/api/user/change-email', userService.authenticateToken, userService.changeEmail);
   app.post('/api/user/change-password', userService.authenticateToken, userService.changePassword);
   app.get('/api/user/info', userService.authenticateToken, userService.getUserInfo);
-
-  return app;
 }
 
-module.exports = { createApp };
+module.exports = { createApp, setupRoutes };

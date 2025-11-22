@@ -3,7 +3,7 @@
  */
 
 const request = require('supertest');
-const { createApp } = require('../../src/app');
+const { createApp, setupRoutes } = require('../../src/app');
 const jwt = require('jsonwebtoken');
 const db = require('../../src/modules/common/db');
 
@@ -16,6 +16,7 @@ describe('User Management API', () => {
 
   beforeAll(() => {
     app = createApp();
+    setupRoutes(app);
     // Create valid JWT token for testing - must match SECRET in auth.js
     validToken = jwt.sign(
       { id: 1, username: 'testuser' },

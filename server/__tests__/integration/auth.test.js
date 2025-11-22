@@ -3,7 +3,7 @@
  */
 
 const request = require('supertest');
-const { createApp } = require('../../src/app');
+const { createApp, setupRoutes } = require('../../src/app');
 const db = require('../../src/modules/common/db');
 
 // Mock database
@@ -14,6 +14,7 @@ describe('Authentication API', () => {
 
   beforeAll(() => {
     app = createApp();
+    setupRoutes(app);
   });
 
   beforeEach(() => {
