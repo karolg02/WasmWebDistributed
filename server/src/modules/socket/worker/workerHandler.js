@@ -75,6 +75,60 @@ function registerWorkerNamespace(io, channel, workers, createQueuePerWorker, bro
                 }
             });
 
+            socket.on("worker_error", async (data) => {
+                const { clientId, error, type } = data;
+                console.error(`[Worker] Error from ${socket.id} for client ${clientId}:`, error);
+
+                const clientSocket = clientSockets.get(clientId);
+                if (clientSocket) {
+                    clientSocket.emit("task_error", {
+                        message: `Worker error: ${error}`,
+                        workerId: socket.id,
+                        type: type
+                    });
+                }
+
+                if (type === 'module_invalid') {
+                    const taskInfo = clientTasks.get(clientId);
+                    if (taskInfo) {
+                        if (taskInfo.taskHistoryId) {
+                            try {
+                                await updateTaskHistory(taskInfo.taskHistoryId, {
+                                    status: 'failed',
+                                    error: `Module invalid: ${error}`,
+                                    completed_at: Date.now()
+                                });
+                            } catch (dbError) {
+                                console.error('[Worker] Error updating task history:', dbError);
+                            }
+                        }
+
+                        // Release locks
+                        for (const wid of taskInfo.workerIds) {
+                            if (workerLocks.get(wid) === clientId) {
+                                workerLocks.delete(wid);
+                            }
+                        }
+                        clientTasks.delete(clientId);
+                    }
+                    
+                    clientStates.delete(clientId);
+                    taskTracker.cleanup(clientId);
+                    
+                    await tryToGiveTasksForWaitingClients(
+                        waitingClients,
+                        workerLocks,
+                        workerQueue,
+                        clientTasks,
+                        clientStates,
+                        workers,
+                        channel,
+                        tasksDevider3000
+                    );
+                    broadcastWorkerQueueList(io, workers, workerLocks, workerQueue, clientTasks);
+                }
+            });
+
             socket.on("batch_result", async (data) => {
                 const { clientId, results, result, tasksCount, method, completedTaskIds } = data;
                 const state = clientStates.get(clientId);

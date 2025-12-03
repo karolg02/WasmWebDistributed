@@ -18,6 +18,7 @@ export const useSocket = () => {
     const [startTime, setStartTime] = useState<number | null>(null);
     const [tasksPerSecond, setTasksPerSecond] = useState<number | null>(null);
     const [queueStatus, setQueueStatus] = useState<QueueStatus>({});
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -33,24 +34,35 @@ export const useSocket = () => {
         const onTaskProgress = (data: Progress & { total?: number }) => {
             setProgress(data);
             setIsCalculating(true);
+            setError(null);
         };
-        const onFinalResult = (data: { result: number; duration: number }) => {
+        const onFinalResult = (data: { result: number; duration: number; error?: string }) => {
             setResult(data.result);
             setDuration(data.duration);
             setIsCalculating(false);
+            if (data.error) {
+                setError(data.error);
+            }
         };
         const onQueueStatus = (data: QueueStatus) => setQueueStatus(data);
+        const onTaskError = (data: { message: string; workerId?: string; type?: string }) => {
+            console.error("Task error:", data);
+            setError(data.message);
+            setIsCalculating(false);
+        };
 
         socket.on("worker_update", onWorkerUpdate);
         socket.on("task_progress", onTaskProgress);
         socket.on("final_result", onFinalResult);
         socket.on("queue_status", onQueueStatus);
+        socket.on("task_error", onTaskError);
 
         return () => {
             socket.off("worker_update", onWorkerUpdate);
             socket.off("task_progress", onTaskProgress);
             socket.off("final_result", onFinalResult);
             socket.off("queue_status", onQueueStatus);
+            socket.off("task_error", onTaskError);
         };
     }, [socket, location.pathname, navigate]);
 
@@ -61,6 +73,7 @@ export const useSocket = () => {
         setStartTime(Date.now());
         setTasksPerSecond(null);
         setProgress({ done: 0, elapsedTime: 0 });
+        setError(null);
 
         if (!socket) {
             return { success: false, error: 'no_socket' };
@@ -82,7 +95,8 @@ export const useSocket = () => {
         startTime,
         tasksPerSecond,
         queueStatus,
-        startTask
+        startTask,
+        error
     };
 };
 

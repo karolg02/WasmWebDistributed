@@ -17,7 +17,7 @@ export function TasksPanel() {
     const [error, setError] = useState<string | null>(null);
 
     const {
-        socket, workers, selectedWorkerIds, setSelectedWorkerIds, progress, result, duration, isCalculating, startTime, queueStatus, startTask
+        socket, workers, selectedWorkerIds, setSelectedWorkerIds, progress, result, duration, isCalculating, startTime, queueStatus, startTask, error: socketError
     } = useSocket();
 
     const [customParams1D, setCustomParams1D] = useState<CustomParams1D>({
@@ -37,6 +37,18 @@ export function TasksPanel() {
             socket.emit("request_worker_list");
         }
     }, [socket]);
+
+    useEffect(() => {
+        if (socketError) {
+            showNotification({ 
+                color: 'red', 
+                title: 'Błąd wykonania', 
+                message: socketError,
+                autoClose: 10000,
+                icon: <IconAlertTriangle size={16} />
+            });
+        }
+    }, [socketError]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

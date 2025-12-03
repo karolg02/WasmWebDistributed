@@ -118,7 +118,8 @@ async function loadClientModule(clientId, sanitizedId, moduleArgs) {
         return instance;
 
     } catch (error) {
-        self.postMessage({ type: 'worker_error', data: { clientId: clientId, error: `Failed to create module instance: ${error.message}` } });
+        self.postMessage({ type: 'module_invalid', data: { clientId: clientId, error: `Failed to create module instance: ${error.message}` } });
+        unloadClientModule(clientId);
         throw error;
     }
 }
@@ -150,9 +151,52 @@ async function processBatch(batch, moduleInstance) {
         throw new Error('Failed to allocate shared memory in WASM');
     }
 
+    // Wzorzec Strategia (Strategy Pattern) - definicja strategii dla różnych typów zadań
+    const TaskStrategies = {
+        'custom1D': {
+            requiredArgs: 3,
+            description: '1D Calculation'
+        },
+        'custom2D': {
+            requiredArgs: 5,
+            description: '2D Calculation'
+        }
+    };
+
+    const strategy = TaskStrategies[method];
+    if (!strategy) {
+        moduleInstance._free(sharedArrayPtr);
+        throw new Error(`Unknown execution method: ${method}`);
+    }
+
+    const requiredArgs = strategy.requiredArgs;
+    
+    // Optional: Check if Wasm module declares its requirements
+    if (typeof moduleInstance._get_required_args === 'function') {
+        const wasmRequired = moduleInstance._get_required_args();
+        if (wasmRequired !== requiredArgs) {
+            moduleInstance._free(sharedArrayPtr);
+            const errorMsg = `Wasm module incompatibility. Module expects ${wasmRequired} args, but task is ${method} (${requiredArgs} args).`;
+            self.postMessage({ 
+                type: 'module_invalid', 
+                data: { 
+                    clientId: clientId, 
+                    error: errorMsg
+                } 
+            });
+            unloadClientModule(clientId);
+            return;
+        }
+    }
+
     try {
         for (let i = 0; i < batch.length; i++) {
             const data = batch[i];
+            
+            if (data.paramsArray.length < requiredArgs) {
+                 throw new Error(`Invalid arguments count for ${method}. Expected at least ${requiredArgs}, got ${data.paramsArray.length}`);
+            }
+
             let result;
 
             try {
@@ -160,13 +204,18 @@ async function processBatch(batch, moduleInstance) {
                 for (let j = 0; j < params.length; j++) {
                     moduleInstance.setValue(sharedArrayPtr + j * 8, params[j], 'double');
                 }
-                result = moduleInstance.ccall(
-                    "main_function", "number",
-                    ["number"],
-                    [sharedArrayPtr]
-                );
+                
+                try {
+                    result = moduleInstance.ccall(
+                        "main_function", "number",
+                        ["number"],
+                        [sharedArrayPtr]
+                    );
+                } catch (ccallError) {
+                    throw new Error(`WASM execution failed (check arguments/signature): ${ccallError.message}`);
+                }
 
-                if (result !== undefined && !isNaN(result)) {
+                if (result !== undefined && !isNaN(result) && isFinite(result)) {
                     resultsForCurrentChunk.push(result);
                     
                     const taskId = data.taskId;
@@ -176,10 +225,19 @@ async function processBatch(batch, moduleInstance) {
                     
                     tasksProcessedInCurrentChunk++;
                 } else {
-                    console.error(`[Worker] Invalid result from task ${data.taskId}:`, result);
+                    throw new Error(`Invalid result: ${result}`);
                 }
             } catch (e) {
-                self.postMessage({ type: 'task_error', data: { taskId: data.taskId, clientId: clientId, error: `ccall execution failed: ${e.message}` } });
+                self.postMessage({ 
+                    type: 'module_invalid', 
+                    data: { 
+                        clientId: clientId, 
+                        taskId: data.taskId,
+                        error: `Task execution failed: ${e.message}. Unloading module.` 
+                    } 
+                });
+                unloadClientModule(clientId);
+                break; 
             }
 
             if (tasksProcessedInCurrentChunk > 0 && (tasksProcessedInCurrentChunk % TASKS_PER_PROGRESS_UPDATE === 0 || (i + 1) === batch.length)) {

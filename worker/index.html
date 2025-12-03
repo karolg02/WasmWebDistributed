@@ -196,6 +196,16 @@
                             statusDiv.textContent += `\nSocket not ready, skipping sending result for ${progressDataForServer.clientId}`;
                         }
                         break;
+                    case 'module_invalid':
+                        statusDiv.textContent += `\n[BŁĄD KRYTYCZNY] Moduł klienta ${message.data.clientId} jest nieprawidłowy: ${message.data.error}`;
+                        if (socket && socket.connected) {
+                            socket.emit("worker_error", { 
+                                clientId: message.data.clientId, 
+                                error: message.data.error,
+                                type: 'module_invalid'
+                            });
+                        }
+                        break;
                     case 'task_error':
                         socket.emit("task_error", message.data);
                         break;
