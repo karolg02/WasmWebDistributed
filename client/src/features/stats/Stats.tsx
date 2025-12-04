@@ -203,15 +203,14 @@ export function Stats() {
                     <Title order={3} c="white" mb="lg" ta="center">
                         Rozkład statusów zadań
                     </Title>
-                    <ResponsiveContainer width="100%" height={300}>
+                    <ResponsiveContainer width="100%" height={250}>
                         <PieChart>
                             <Pie
                                 data={pieData}
                                 cx="50%"
                                 cy="50%"
                                 labelLine={false}
-                                label={(entry: any) => `${entry.name} ${(entry.percent * 100).toFixed(0)}%`}
-                                outerRadius={100}
+                                outerRadius={80}
                                 fill="#8884d8"
                                 dataKey="value"
                             >
@@ -226,6 +225,21 @@ export function Stats() {
                                     borderRadius: '8px',
                                     color: 'white'
                                 }} 
+                            />
+                            <Legend 
+                                verticalAlign="bottom"
+                                align="center"
+                                layout="horizontal"
+                                wrapperStyle={{ 
+                                    paddingTop: '20px',
+                                    color: 'white'
+                                }}
+                                formatter={(value: string, entry: any) => {
+                                    const item = pieData.find(d => d.name === value);
+                                    const total = pieData.reduce((sum, d) => sum + d.value, 0);
+                                    const percent = total > 0 ? ((item?.value || 0) / total * 100).toFixed(0) : 0;
+                                    return <span style={{ color: entry.color }}>{value} ({percent}%)</span>;
+                                }}
                             />
                         </PieChart>
                     </ResponsiveContainer>
