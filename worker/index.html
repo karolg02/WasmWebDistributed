@@ -60,20 +60,18 @@
             const workerBusy = new Map();
             let dispatchIntervalId = null;
             const workerAssignedRemaining = new Map();
-            const completedTaskIds = new Set(); // Track completed task IDs
-            let heartbeatInterval = null; // Heartbeat interval ID
-            let dispatchScheduled = false; // Flaga dla asynchronicznego dispatchChunks
-            let lastStatusUpdate = 0; // Throttling aktualizacji UI
-            const STATUS_UPDATE_THROTTLE = 500; // Max aktualizacja UI co 500ms
-            let pendingStatusMessages = []; // Bufor wiadomości statusu
+            const completedTaskIds = new Set();
+            let heartbeatInterval = null;
+            let dispatchScheduled = false;
+            let lastStatusUpdate = 0;
+            const STATUS_UPDATE_THROTTLE = 500;
+            let pendingStatusMessages = [];
 
-            // Throttled aktualizacja statusDiv - nie blokuje głównego wątku
             function updateStatus(message, force = false) {
                 const now = Date.now();
                 pendingStatusMessages.push(message);
                 
                 if (force || (now - lastStatusUpdate) >= STATUS_UPDATE_THROTTLE) {
-                    // Flush all pending messages
                     if (pendingStatusMessages.length > 0) {
                         statusDiv.textContent += pendingStatusMessages.join('');
                         pendingStatusMessages = [];
@@ -90,7 +88,6 @@
                 return Math.min(pendingTasks.length, STATIC_CHUNK_SIZE);
             }
 
-            // Asynchroniczne planowanie dispatchChunks - nie blokuje głównego wątku
             function scheduleDispatch() {
                 if (dispatchScheduled) return;
                 dispatchScheduled = true;
@@ -192,7 +189,6 @@
                         socket.emit("register", workerInfo);
                         updateStatus(`\nZarejestrowano workerów na serwerze. Czekam na zadania...`, true);
                         
-                        // Start heartbeat
                         startHeartbeat();
                         break;
                     case 'batch_progress':
@@ -202,10 +198,9 @@
                         workerAssignedRemaining.set(workerId, newRemaining);
                         if (newRemaining === 0) {
                             workerBusy.set(workerId, false);
-                            scheduleDispatch(); // Asynchroniczne wywołanie - nie blokuje głównego wątku
+                            scheduleDispatch();
                         }
                         
-                        // Track completed task IDs
                         const taskIds = message.data.completedTaskIds || [];
                         taskIds.forEach(id => completedTaskIds.add(id));
                         
@@ -268,9 +263,9 @@
                             completedTasksTotal: completedTaskIds.size
                         });
                     }
-                }, 5000); // co 5 sekund
+                }, 10000);
                 
-                updateStatus('\nHeartbeat uruchomiony (5s interval)', true);
+                updateStatus('\nHeartbeat uruchomiony (10s interval)', true);
             }
             
             function stopHeartbeat() {
@@ -314,7 +309,6 @@
                     if (!currentClientId) {
                         currentClientId = batchClientId;
                     } else if (currentClientId !== batchClientId) {
-                        // Nowy klient - wyczyść completed tasks
                         completedTaskIds.clear();
                         currentClientId = batchClientId;
                         updateStatus(`\nNowy klient ${batchClientId}, resetowanie tracking`);
