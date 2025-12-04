@@ -62,6 +62,25 @@
             const workerAssignedRemaining = new Map();
             const completedTaskIds = new Set(); // Track completed task IDs
             let heartbeatInterval = null; // Heartbeat interval ID
+            let dispatchScheduled = false; // Flaga dla asynchronicznego dispatchChunks
+            let lastStatusUpdate = 0; // Throttling aktualizacji UI
+            const STATUS_UPDATE_THROTTLE = 500; // Max aktualizacja UI co 500ms
+            let pendingStatusMessages = []; // Bufor wiadomości statusu
+
+            // Throttled aktualizacja statusDiv - nie blokuje głównego wątku
+            function updateStatus(message, force = false) {
+                const now = Date.now();
+                pendingStatusMessages.push(message);
+                
+                if (force || (now - lastStatusUpdate) >= STATUS_UPDATE_THROTTLE) {
+                    // Flush all pending messages
+                    if (pendingStatusMessages.length > 0) {
+                        statusDiv.textContent += pendingStatusMessages.join('');
+                        pendingStatusMessages = [];
+                    }
+                    lastStatusUpdate = now;
+                }
+            }
 
             function initWorkerBusy() {
                 workerPool.forEach(w => workerBusy.set(w.id, false));
@@ -69,6 +88,16 @@
 
             function computeChunkSize() {
                 return Math.min(pendingTasks.length, STATIC_CHUNK_SIZE);
+            }
+
+            // Asynchroniczne planowanie dispatchChunks - nie blokuje głównego wątku
+            function scheduleDispatch() {
+                if (dispatchScheduled) return;
+                dispatchScheduled = true;
+                setTimeout(() => {
+                    dispatchScheduled = false;
+                    dispatchChunks();
+                }, 0);
             }
 
             function dispatchChunks() {
@@ -87,7 +116,7 @@
                     try {
                         w.postMessage({ type: 'task_batch', data: chunk });
                     } catch (err) {
-                        statusDiv.textContent += `\nFailed to postMessage to worker ${w.id}: ${err.message}`;
+                        updateStatus(`\nFailed to postMessage to worker ${w.id}: ${err.message}`);
                         workerBusy.set(w.id, false);
                     }
                 }
@@ -121,7 +150,7 @@
                     };
 
                     worker.onerror = function (e) {
-                        statusDiv.textContent += `\nError od workera: ${worker.id} - ${e.message}`;
+                        updateStatus(`\nError od workera: ${worker.id} - ${e.message}`);
                     };
                     workerPool.push(worker);
                 }
@@ -144,7 +173,7 @@
                         break;
                     case 'benchmark_result':
                         const benchmarkScore = message.error ? 0 : parseFloat(message.score);
-                        statusDiv.textContent += `\nTest wydajnościowy zakończony. Wynik: ${benchmarkScore.toFixed(2)}`;
+                        updateStatus(`\nTest wydajnościowy zakończony. Wynik: ${benchmarkScore.toFixed(2)}`, true);
 
                         const workerInfo = {
                             system: {
@@ -161,7 +190,7 @@
                             }
                         };
                         socket.emit("register", workerInfo);
-                        statusDiv.textContent += `\nZarejestrowano workerów na serwerze. Czekam na zadania...`;
+                        updateStatus(`\nZarejestrowano workerów na serwerze. Czekam na zadania...`, true);
                         
                         // Start heartbeat
                         startHeartbeat();
@@ -173,7 +202,7 @@
                         workerAssignedRemaining.set(workerId, newRemaining);
                         if (newRemaining === 0) {
                             workerBusy.set(workerId, false);
-                            dispatchChunks();
+                            scheduleDispatch(); // Asynchroniczne wywołanie - nie blokuje głównego wątku
                         }
                         
                         // Track completed task IDs
@@ -193,11 +222,11 @@
                         if (socket && socket.connected) {
                             socket.emit("batch_result", progressDataForServer);
                         } else {
-                            statusDiv.textContent += `\nSocket not ready, skipping sending result for ${progressDataForServer.clientId}`;
+                            updateStatus(`\nSocket not ready, skipping sending result for ${progressDataForServer.clientId}`);
                         }
                         break;
                     case 'module_invalid':
-                        statusDiv.textContent += `\n[BŁĄD KRYTYCZNY] Moduł klienta ${message.data.clientId} jest nieprawidłowy: ${message.data.error}`;
+                        updateStatus(`\n[BŁĄD KRYTYCZNY] Moduł klienta ${message.data.clientId} jest nieprawidłowy: ${message.data.error}`, true);
                         if (socket && socket.connected) {
                             socket.emit("worker_error", { 
                                 clientId: message.data.clientId, 
@@ -213,7 +242,7 @@
                         if (message.data.clientId) {
                             socket.emit("worker_error", { clientId: message.data.clientId, error: message.data.error });
                         }
-                        statusDiv.textContent += `\nWorker ${workerId} zarejestrował error: ${message.data.error}`;
+                        updateStatus(`\nWorker ${workerId} zarejestrował error: ${message.data.error}`);
                         break;
                     case 'custom_module_loaded':
                         socket.emit("custom_module_loaded", { clientId: message.data.clientId });
@@ -241,14 +270,14 @@
                     }
                 }, 5000); // co 5 sekund
                 
-                statusDiv.textContent += '\nHeartbeat uruchomiony (5s interval)';
+                updateStatus('\nHeartbeat uruchomiony (5s interval)', true);
             }
             
             function stopHeartbeat() {
                 if (heartbeatInterval) {
                     clearInterval(heartbeatInterval);
                     heartbeatInterval = null;
-                    statusDiv.textContent += '\nHeartbeat zatrzymany';
+                    updateStatus('\nHeartbeat zatrzymany', true);
                 }
             }
 
@@ -257,13 +286,13 @@
 
                 socket.on("connect", () => {
                     myWorkerId = socket.id;
-                    statusDiv.textContent += '\nPołączono z serwerem. Mierzenie opóźnienia...';
+                    updateStatus('\nPołączono z serwerem. Mierzenie opóźnienia...', true);
                     const pingStart = performance.now();
                     socket.emit("ping_resultSocket");
 
                     socket.on("pong_resultSocket", () => {
                         mainLatency = (performance.now() - pingStart).toFixed(2);
-                        statusDiv.textContent += `\nOpóźnienie: ${mainLatency}ms. Rozpoczęcie benchmarku...`;
+                        updateStatus(`\nOpóźnienie: ${mainLatency}ms. Rozpoczęcie benchmarku...`, true);
                         if (workerPool.length > 0) {
                             workerPool[0].postMessage({ type: 'run_benchmark' });
                         }
@@ -288,7 +317,7 @@
                         // Nowy klient - wyczyść completed tasks
                         completedTaskIds.clear();
                         currentClientId = batchClientId;
-                        statusDiv.textContent += `\nNowy klient ${batchClientId}, resetowanie tracking`;
+                        updateStatus(`\nNowy klient ${batchClientId}, resetowanie tracking`);
                     }
 
                     pendingTasks.push(...batch);
@@ -302,7 +331,7 @@
                         return;
                     }
                     
-                    statusDiv.textContent += `\nWczytuje WASM dla ${data.clientId}`;
+                    updateStatus(`\nWczytuje WASM dla ${data.clientId}`);
                     workerPool.forEach(worker => {
                         worker.postMessage({ type: 'custom_wasm_available', data: data });
                     });
@@ -320,11 +349,11 @@
 
                 socket.on("connect_error", (err) => {
                     console.error("[Main] Connection Error:", err.message);
-                    statusDiv.textContent += `\nError w połączeniu - ${err.message}`;
+                    updateStatus(`\nError w połączeniu - ${err.message}`, true);
                 });
 
                 socket.on("disconnect", (reason) => {
-                    statusDiv.textContent += `\nOdłączono od serwera - ${reason}`;
+                    updateStatus(`\nOdłączono od serwera - ${reason}`, true);
                     stopHeartbeat();
                 });
             }

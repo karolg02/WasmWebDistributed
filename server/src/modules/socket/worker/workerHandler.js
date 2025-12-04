@@ -4,8 +4,8 @@ const { updateTaskBatch, updateTaskHistory } = require('../../common/db');
 
 function registerWorkerNamespace(io, channel, workers, createQueuePerWorker, broadcastWorkerList, clientStates, clientSockets, getClientResult, activeCustomFunctions, tempDir, clientTasks, workerLocks, tryToGiveTasksForWaitingClients, waitingClients, workerQueue, tasksDevider3000, broadcastWorkerQueueList) {
     const PROGRESS_INTERVAL_MS = 1000;
-    const HEARTBEAT_TIMEOUT_MS = 15000; // 15 sekund bez heartbeat = timeout
-    const HEARTBEAT_CHECK_INTERVAL_MS = 10000; // sprawdzaj co 10 sekund
+    const HEARTBEAT_TIMEOUT_MS = 30000; // 30 sekund bez heartbeat = timeout (zwiększone dla ciężkich obliczeń)
+    const HEARTBEAT_CHECK_INTERVAL_MS = 15000; // sprawdzaj co 15 sekund
 
     // Periodic heartbeat check
     const heartbeatChecker = setInterval(() => {
